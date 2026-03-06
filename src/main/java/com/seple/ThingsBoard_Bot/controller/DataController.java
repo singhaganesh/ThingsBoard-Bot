@@ -2,6 +2,8 @@ package com.seple.ThingsBoard_Bot.controller;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -68,14 +70,14 @@ public class DataController {
             @RequestHeader(value = "X-TB-Token", required = false) String userToken) {
         log.info("API Request: GET /api/v1/data/all-devices (user token: {})", userToken != null ? "present" : "absent");
         
-        java.util.List<Map<String, String>> cleanedDevices = new java.util.ArrayList<>();
+        List<Map<String, String>> cleanedDevices = new ArrayList<>();
 
         if (userToken != null && !userToken.isBlank()) {
             // Get user scoped devices directly
             cleanedDevices = userDataService.getUserDevicesList(userToken);
         } else {
             // Fallback to all tenant devices
-            java.util.List<Map<String, String>> devices = tbClient.getAllDevices();
+            List<Map<String, String>> devices = tbClient.getAllDevices();
             for (Map<String, String> device : devices) {
                 Map<String, String> basicInfo = new HashMap<>();
                 basicInfo.put("device_id", device.get("id"));

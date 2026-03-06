@@ -1,6 +1,10 @@
 package com.seple.ThingsBoard_Bot.service;
 
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 
 import org.springframework.stereotype.Service;
 
@@ -73,7 +77,7 @@ public class ChatService {
             // Step 1: Get device data (from user cache or fallback to default cache)
             Map<String, Object> rawData;
             if (userToken != null && !userToken.isBlank()) {
-                java.util.List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
+                List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
                 rawData = filterDevicesForQuestion(allDevices, request.getQuestion());
             } else {
                 rawData = dataService.getDeviceData();
@@ -133,7 +137,7 @@ public class ChatService {
             log.info("✅ Question answered in {}ms ({} tokens)", duration, totalTokens);
 
             // Build a small summary context for the response
-            Map<String, Object> summaryContext = new java.util.LinkedHashMap<>();
+            Map<String, Object> summaryContext = new LinkedHashMap<>();
             // Only add basic overview items, not full arrays which clutters UI
             for (Map.Entry<String, Object> entry : filteredData.entrySet()) {
                 if (entry.getKey().toLowerCase().contains("name") || entry.getKey().toLowerCase().contains("status")) {
@@ -219,13 +223,13 @@ public class ChatService {
      * Filters a list of user devices based on whether the device name 
      * is mentioned in the question.
      */
-    private Map<String, Object> filterDevicesForQuestion(java.util.List<Map<String, Object>> allDevices, String question) {
+    private Map<String, Object> filterDevicesForQuestion(List<Map<String, Object>> allDevices, String question) {
         if (allDevices == null || allDevices.isEmpty()) {
-            return new java.util.HashMap<>();
+            return new HashMap<>();
         }
         
         String qLower = question == null ? "" : question.toLowerCase();
-        java.util.List<Map<String, Object>> matchedDevices = new java.util.ArrayList<>();
+        List<Map<String, Object>> matchedDevices = new ArrayList<>();
         
         for (Map<String, Object> dev : allDevices) {
             String name = (String) dev.getOrDefault("device_name", "");
@@ -250,7 +254,7 @@ public class ChatService {
             flat = flattenDeviceList(allDevices);
         } else {
             flat.put("SYSTEM_NOTE", "The user has " + allDevices.size() + " devices. Their question did not specifying which device. DO NOT GUESS. Ask them to specify which device they mean.");
-            java.util.List<String> names = new java.util.ArrayList<>();
+            List<String> names = new ArrayList<>();
             for (Map<String, Object> dev : allDevices) {
                 names.add((String) dev.getOrDefault("device_name", "Unknown"));
             }
@@ -264,7 +268,7 @@ public class ChatService {
      * Flattens a list of devices into a single map context.
      * Prefixes properties with device names if there are multiple devices.
      */
-    private Map<String, Object> flattenDeviceList(java.util.List<Map<String, Object>> devices) {
+    private Map<String, Object> flattenDeviceList(List<Map<String, Object>> devices) {
         Map<String, Object> flat = new java.util.HashMap<>();
         if (devices.size() == 1) {
             flat.putAll(devices.get(0));

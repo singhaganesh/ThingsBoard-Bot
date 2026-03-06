@@ -3,6 +3,7 @@ package com.seple.ThingsBoard_Bot.client;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
@@ -90,7 +91,7 @@ public class ThingsBoardClient {
     public List<Map<String, String>> getAllDevices() {
         String url = config.getUrl() + "/api/tenant/devices?pageSize=1000&page=0";
         log.debug("Fetching all tenant devices from: {}", url);
-        List<Map<String, String>> devices = new java.util.ArrayList<>();
+        List<Map<String, String>> devices = new ArrayList<>();
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
@@ -248,7 +249,7 @@ public class ThingsBoardClient {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 json.fields().forEachRemaining(entry -> {
-                    List<Map<String, Object>> points = new java.util.ArrayList<>();
+                    List<Map<String, Object>> points = new ArrayList<>();
                     for (JsonNode point : entry.getValue()) {
                         Map<String, Object> p = new HashMap<>();
                         p.put("ts", point.get("ts").asLong());
