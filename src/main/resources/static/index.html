@@ -579,9 +579,13 @@
             showTyping();
 
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                const token = localStorage.getItem('jwt_token');
+                if (token) headers['X-TB-Token'] = token;
+
                 const response = await fetch(CHAT_ENDPOINT, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify({ question })
                 });
 
@@ -674,7 +678,11 @@
         // ========== Alert Polling ==========
         async function checkAlerts() {
             try {
-                const response = await fetch(ALERT_ENDPOINT);
+                const headers = {};
+                const token = localStorage.getItem('jwt_token');
+                if (token) headers['X-TB-Token'] = token;
+
+                const response = await fetch(ALERT_ENDPOINT, { headers });
                 if (!response.ok) return;
 
                 const data = await response.json();

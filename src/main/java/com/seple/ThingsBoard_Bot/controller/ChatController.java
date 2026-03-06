@@ -3,6 +3,7 @@ package com.seple.ThingsBoard_Bot.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,10 +27,15 @@ public class ChatController {
     /**
      * POST /api/v1/chat/ask
      * Answer a user question about IoT device data.
+     * If X-TB-Token header is present, data is scoped to that user's devices only.
      */
     @PostMapping("/ask")
-    public ResponseEntity<ChatResponse> askQuestion(@RequestBody ChatRequest request) {
-        log.info("Received chat request: '{}'", request.getQuestion());
+    public ResponseEntity<ChatResponse> askQuestion(
+            @RequestBody ChatRequest request,
+            @RequestHeader(value = "X-TB-Token", required = false) String userToken) {
+
+        log.info("Received chat request: '{}' (user token: {})",
+                request.getQuestion(), userToken != null ? "present" : "absent");
 
         if (request.getQuestion() == null || request.getQuestion().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(
@@ -41,7 +47,8 @@ public class ChatController {
             );
         }
 
-        ChatResponse response = chatService.answerQuestion(request);
+        ChatResponse response = chatService.answerQuestion(request, userToken);
         return ResponseEntity.ok(response);
     }
 }
+

@@ -31,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ChatService {
 
     private final DataService dataService;
+    private final UserDataService userDataService;
     private final OpenAIClient openAIClient;
     private final ChartService chartService;
     private final ObjectMapper objectMapper;
@@ -51,8 +52,9 @@ public class ChatService {
             - Format numbers nicely (e.g., "67%" not "67.0")
             """;
 
-    public ChatService(DataService dataService, OpenAIClient openAIClient, ChartService chartService) {
+    public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService) {
         this.dataService = dataService;
+        this.userDataService = userDataService;
         this.openAIClient = openAIClient;
         this.chartService = chartService;
         this.objectMapper = new ObjectMapper();
@@ -60,14 +62,22 @@ public class ChatService {
 
     /**
      * Answer a user question about device data.
+     * Takes an optional userToken for per-user device scoping.
      */
-    public ChatResponse answerQuestion(ChatRequest request) {
+    public ChatResponse answerQuestion(ChatRequest request, String userToken) {
         long startTime = System.currentTimeMillis();
-        log.info("📩 Processing question: '{}'", request.getQuestion());
+        log.info("📩 Processing question: '{}' (user token: {})",
+                request.getQuestion(), userToken != null ? "present" : "absent");
 
         try {
-            // Step 1: Get device data (from cache or fresh fetch)
-            Map<String, Object> rawData = dataService.getDeviceData();
+            // Step 1: Get device data (from user cache or fallback to default cache)
+            Map<String, Object> rawData;
+            if (userToken != null && !userToken.isBlank()) {
+                java.util.List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
+                rawData = filterDevicesForQuestion(allDevices, request.getQuestion());
+            } else {
+                rawData = dataService.getDeviceData();
+            }
             log.debug("Got {} raw data keys", rawData.size());
 
             // Step 2: Filter context to reduce tokens
@@ -98,24 +108,38 @@ public class ChatService {
             if (Boolean.TRUE.equals(request.getIncludeChart()) || isChartRequest(request.getQuestion())) {
                 String chartKey = detectChartKey(request.getQuestion(), filteredData);
                 if (chartKey != null) {
-                    chartData = chartService.generateChartData(chartKey);
-                    log.info("📊 Chart generated for key: {}", chartKey);
+                    String actualKey = chartKey;
+                    String deviceId = null;
+
+                    // If userToken is present and we have multiple devices, the key might be prefixed
+                    if (userToken != null && !userToken.isBlank()) {
+                        if (chartKey.contains(".")) {
+                            String deviceName = chartKey.substring(0, chartKey.lastIndexOf("."));
+                            actualKey = chartKey.substring(chartKey.lastIndexOf(".") + 1);
+                            Object devIdObj = filteredData.get(deviceName + ".device_id");
+                            if (devIdObj != null) deviceId = devIdObj.toString();
+                        } else {
+                            Object devIdObj = filteredData.get("device_id");
+                            if (devIdObj != null) deviceId = devIdObj.toString();
+                        }
+                    }
+
+                    chartData = chartService.generateChartData(userToken, deviceId, actualKey);
+                    log.info("📊 Chart generated for actual key: {}", actualKey);
                 }
             }
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("✅ Question answered in {}ms ({} tokens)", duration, totalTokens);
 
-            // Build a small summary context for the response (not the full data)
+            // Build a small summary context for the response
             Map<String, Object> summaryContext = new java.util.LinkedHashMap<>();
-            if (filteredData.containsKey("deviceName"))
-                summaryContext.put("deviceName", filteredData.get("deviceName"));
-            if (filteredData.containsKey("status"))
-                summaryContext.put("status", filteredData.get("status"));
-            if (filteredData.containsKey("active"))
-                summaryContext.put("active", filteredData.get("active"));
-            if (filteredData.containsKey("alarmCount"))
-                summaryContext.put("alarmCount", filteredData.get("alarmCount"));
+            // Only add basic overview items, not full arrays which clutters UI
+            for (Map.Entry<String, Object> entry : filteredData.entrySet()) {
+                if (entry.getKey().toLowerCase().contains("name") || entry.getKey().toLowerCase().contains("status")) {
+                    summaryContext.put(entry.getKey(), entry.getValue());
+                }
+            }
             summaryContext.put("dataKeysUsed", filteredData.size());
 
             return ChatResponse.builder()
@@ -189,5 +213,70 @@ public class ChatService {
                 .filter(k -> k.toLowerCase().contains(keyword))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Filters a list of user devices based on whether the device name 
+     * is mentioned in the question.
+     */
+    private Map<String, Object> filterDevicesForQuestion(java.util.List<Map<String, Object>> allDevices, String question) {
+        if (allDevices == null || allDevices.isEmpty()) {
+            return new java.util.HashMap<>();
+        }
+        
+        String qLower = question == null ? "" : question.toLowerCase();
+        java.util.List<Map<String, Object>> matchedDevices = new java.util.ArrayList<>();
+        
+        for (Map<String, Object> dev : allDevices) {
+            String name = (String) dev.getOrDefault("device_name", "");
+            if (!name.isEmpty()) {
+                String nameLower = name.toLowerCase();
+                String strippedName = nameLower.contains("-") ? nameLower.substring(nameLower.indexOf("-") + 1) : nameLower;
+                
+                if (qLower.contains(nameLower) || (strippedName.length() >= 3 && qLower.contains(strippedName))) {
+                    matchedDevices.add(dev);
+                }
+            }
+        }
+        
+        Map<String, Object> flat = new java.util.HashMap<>();
+        
+        // If matched specific devices, use those.
+        // If no match but less than 3 devices total, use all (small enough context).
+        // Otherwise, send a summary to force the user to specify to prevent token limits.
+        if (!matchedDevices.isEmpty()) {
+            flat = flattenDeviceList(matchedDevices);
+        } else if (allDevices.size() <= 2) {
+            flat = flattenDeviceList(allDevices);
+        } else {
+            flat.put("SYSTEM_NOTE", "The user has " + allDevices.size() + " devices. Their question did not specifying which device. DO NOT GUESS. Ask them to specify which device they mean.");
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (Map<String, Object> dev : allDevices) {
+                names.add((String) dev.getOrDefault("device_name", "Unknown"));
+            }
+            flat.put("available_devices_for_user_to_choose_from", names);
+        }
+        
+        return flat;
+    }
+
+    /**
+     * Flattens a list of devices into a single map context.
+     * Prefixes properties with device names if there are multiple devices.
+     */
+    private Map<String, Object> flattenDeviceList(java.util.List<Map<String, Object>> devices) {
+        Map<String, Object> flat = new java.util.HashMap<>();
+        if (devices.size() == 1) {
+            flat.putAll(devices.get(0));
+        } else {
+            flat.put("total_devices_in_context", devices.size());
+            for (Map<String, Object> deviceData : devices) {
+                String name = deviceData.getOrDefault("device_name", "unknown").toString();
+                for (Map.Entry<String, Object> entry : deviceData.entrySet()) {
+                    flat.put(name + "." + entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        return flat;
     }
 }

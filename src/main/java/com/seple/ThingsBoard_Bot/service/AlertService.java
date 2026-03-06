@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.seple.ThingsBoard_Bot.client.ThingsBoardClient;
+import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
 import com.seple.ThingsBoard_Bot.model.dto.AlertData;
 
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,8 @@ import lombok.extern.slf4j.Slf4j;
 public class AlertService {
 
     private final ThingsBoardClient tbClient;
+    private final UserAwareThingsBoardClient userTbClient;
+    private final UserDataService userDataService;
 
     // Last known alert state
     private volatile AlertData lastAlertData;
@@ -34,8 +37,10 @@ public class AlertService {
     private static final int CPU_CRITICAL_THRESHOLD = 90;   // %
     private static final int MEMORY_CRITICAL_THRESHOLD = 95; // %
 
-    public AlertService(ThingsBoardClient tbClient) {
+    public AlertService(ThingsBoardClient tbClient, UserAwareThingsBoardClient userTbClient, UserDataService userDataService) {
         this.tbClient = tbClient;
+        this.userTbClient = userTbClient;
+        this.userDataService = userDataService;
         this.lastAlertData = AlertData.builder()
                 .hasAlert(false)
                 .alerts(new ArrayList<>())
@@ -46,6 +51,7 @@ public class AlertService {
     /**
      * Periodic alert check — runs every 10 seconds.
      * Bypasses the DataService cache to get LIVE data.
+     * Note: This remains global/tenant-level for the background worker.
      */
     @Scheduled(fixedDelayString = "${iotchatbot.chatbot.alert-poll-interval:10000}")
     @ConditionalOnProperty(name = "iotchatbot.chatbot.enable-alerts", havingValue = "true", matchIfMissing = true)
@@ -74,21 +80,56 @@ public class AlertService {
 
     /**
      * On-demand alert check — also bypasses cache.
+     * If userToken is provided, it checks the user's specific devices.
      */
-    public AlertData checkAlerts() {
-        try {
-            Map<String, Object> liveData = tbClient.getTelemetry();
-            List<String> alerts = evaluateAlerts(liveData);
+    public AlertData checkAlerts(String userToken) {
+        if (userToken == null || userToken.isBlank()) {
+            // Fallback to global/tenant check
+            try {
+                Map<String, Object> liveData = tbClient.getTelemetry();
+                List<String> alerts = evaluateAlerts(liveData);
 
-            return AlertData.builder()
-                    .hasAlert(!alerts.isEmpty())
-                    .alerts(alerts)
-                    .timestamp(System.currentTimeMillis())
-                    .build();
-        } catch (Exception e) {
-            log.error("❌ Error checking alerts: {}", e.getMessage());
-            // Return last known state if live check fails
-            return lastAlertData;
+                return AlertData.builder()
+                        .hasAlert(!alerts.isEmpty())
+                        .alerts(alerts)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+            } catch (Exception e) {
+                log.error("❌ Error checking global alerts: {}", e.getMessage());
+                return lastAlertData;
+            }
+        } else {
+            // User-scoped check
+            try {
+                List<String> allAlerts = new ArrayList<>();
+                List<Map<String, String>> devices = userDataService.getUserDevicesList(userToken);
+                
+                for (Map<String, String> device : devices) {
+                    String deviceId = device.get("device_id");
+                    String deviceName = device.get("device_name");
+                    
+                    Map<String, Object> liveData = userTbClient.getTelemetry(userToken, deviceId);
+                    List<String> deviceAlerts = evaluateAlerts(liveData);
+                    
+                    for(String alert : deviceAlerts) {
+                        allAlerts.add("[" + deviceName + "] " + alert);
+                    }
+                }
+                
+                return AlertData.builder()
+                        .hasAlert(!allAlerts.isEmpty())
+                        .alerts(allAlerts)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+            } catch (Exception e) {
+                log.error("❌ Error checking alerts for user: {}", e.getMessage());
+                // Return an empty/safe state rather than exposing global alerts to a restricted user
+                return AlertData.builder()
+                        .hasAlert(false)
+                        .alerts(new ArrayList<>())
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+            }
         }
     }
 

@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import com.seple.ThingsBoard_Bot.client.ThingsBoardClient;
+import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
 import com.seple.ThingsBoard_Bot.model.dto.ChartData;
 
 import lombok.extern.slf4j.Slf4j;
@@ -20,27 +21,36 @@ import lombok.extern.slf4j.Slf4j;
 public class ChartService {
 
     private final ThingsBoardClient tbClient;
+    private final UserAwareThingsBoardClient userTbClient;
 
     private static final long TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000L;
 
-    public ChartService(ThingsBoardClient tbClient) {
+    public ChartService(ThingsBoardClient tbClient, UserAwareThingsBoardClient userTbClient) {
         this.tbClient = tbClient;
+        this.userTbClient = userTbClient;
     }
 
     /**
      * Generate chart data for a given telemetry key (last 24 hours).
      *
-     * @param key The telemetry key (e.g., "battery_status", "temperature")
+     * @param userToken Optional user token for scoped access.
+     * @param deviceId  Optional device ID (required if userToken is present).
+     * @param key       The telemetry key (e.g., "battery_status", "temperature")
      * @return ChartData formatted for Chart.js
      */
-    public ChartData generateChartData(String key) {
+    public ChartData generateChartData(String userToken, String deviceId, String key) {
         log.info("📊 Generating chart data for key: '{}'", key);
 
         long endTs = System.currentTimeMillis();
         long startTs = endTs - TWENTY_FOUR_HOURS_MS;
 
         try {
-            Map<String, List<Map<String, Object>>> history = tbClient.getHistory(key, startTs, endTs);
+            Map<String, List<Map<String, Object>>> history;
+            if (userToken != null && !userToken.isBlank() && deviceId != null && !deviceId.isBlank()) {
+                history = userTbClient.getHistory(userToken, deviceId, key, startTs, endTs);
+            } else {
+                history = tbClient.getHistory(key, startTs, endTs);
+            }
 
             List<ChartData.DataPoint> points = new ArrayList<>();
 
