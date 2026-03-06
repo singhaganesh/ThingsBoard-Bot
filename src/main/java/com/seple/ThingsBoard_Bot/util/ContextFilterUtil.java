@@ -1,0 +1,200 @@
+package com.seple.ThingsBoard_Bot.util;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Filters device attributes to reduce token count before sending to OpenAI.
+ * <p>
+ * Raw device data can have ~200+ keys and ~17,000 tokens.
+ * After filtering, we keep ~20-30 relevant keys and ~3,000-4,000 tokens.
+ * </p>
+ */
+@Slf4j
+public class ContextFilterUtil {
+
+    // Maximum allowed length for a single attribute value
+    private static final int MAX_VALUE_LENGTH = 300;
+
+    // Keys to ALWAYS keep (most useful for chatbot Q&A)
+    private static final Set<String> IMPORTANT_KEYS = Set.of(
+            // Device identity
+            "deviceName", "branchName", "customer_title", "zoName", "nbgName", "branch_id",
+            "deviceType", "gateway",
+
+            // System status
+            "active", "status", "gwHealth", "gwStatus", "system_status",
+            "SYSTEM ON", "MAINS ON", "BATTERY ON", "BATTERY LOW", "BATTERY REVERSE",
+            "NETWORK", "POWER OFF",
+
+            // Battery & power
+            "battery_status", "ac_status", "current_status",
+
+            // Subsystem health/status
+            "iasHealth", "iasStatus", "iasSystem", "ias", "iasUptime",
+            "cctvStatus", "cctvUptime", "cctv", "hddStatus", "nvrStatus",
+            "fasHealth", "fasStatus", "fas", "fasSystem",
+            "integratedStatus", "integratedType",
+            "basHealth", "basStatus", "bas", "basSystem",
+            "timeLockHealth", "timeLock",
+            "accessControlHealth", "accessControl",
+            "cameraLinkStatus", "gatewayStatus",
+
+            // Alarms
+            "alarmCount", "severity", "alerts", "errorCount",
+            "CAMERA DISCONNECT", "CAMERA TAMPER", "HDD ERROR",
+            "INTEGRATED ALARM SYSTEM FAULT", "DVR/NVR OFF",
+
+            // Location
+            "lat", "lon", "lat1", "lon1",
+
+            // Hardware info
+            "cpu", "memory", "disk", "temperature", "frequency",
+            "net_sent_mb", "net_recv_mb",
+            "Hikvision_NVR_model", "Hikvision_NVR_deviceName", "Hikvision_NVR_Heartbeat",
+            "DahuaNVR_Heartbeat",
+
+            // Timestamps
+            "timestamp", "time", "date",
+
+            // Uptime
+            "uptimeTotal", "uptimeHeartbeat", "gatewayUptime",
+
+            // Counts
+            "iasLastHour", "cctvLastHour", "fasLastHour", "gatewayLastHour",
+            "IASinactiveCOUNT", "IASfaultCOUNT"
+    );
+
+    // Suffixes of keys to always skip
+    private static final Set<String> SKIP_SUFFIXES = Set.of(
+            "_history"
+    );
+
+    // Prefixes of keys to always skip
+    private static final Set<String> SKIP_PREFIXES = Set.of(
+            "fw_", "sw_", "$", "provision", "target",
+            "cameraTamperCH", "cameraDisconnectCH",
+            "arrLat", "arrLon", "TotalLat", "TotalLon"
+    );
+
+    // Exact keys to always skip
+    private static final Set<String> SKIP_KEYS = Set.of(
+            "fetched_at", "id", "undefined", "notification", "care",
+            "log_type", "alarmFlag", "attribute",
+            "rock", "rockAI", "dexter_config",
+            "rpi_usage", "rpi_alert", "usage_history",
+            "Total_Data_Usage", "usage_daily", "usage_last_7_days", "usage_last_15_days",
+            "watchdog_log", "lowDurationCameras",
+            "imei_id", "cavlidata_ontime",
+            "hikvision_ntp", "HiksyncTimeDate",
+            "Hikvision_NVR_serialNumber", "Hikvision_NVR_macAddress",
+            "Hikvision_NVR_firmwareVersion", "Hikvision_NVR_hardwareVersion",
+            "Hikvision_NVR_Processor", "Hikvision_NVR_deviceID",
+            "Hikvision_NVR_HDDInfo", "Hikvision_NVR_CameraRecInfo",
+            "Hikvision_NVR_cameraInfo", "Hikvision_NVR_Date", "Hikvision_NVR_Time",
+            "Hikvision_NVR_Manufacturer", "Hikvision_NVR_deviceType",
+            "Hik_SD_card_info", "Hik_SD_card_rec_info_list",
+            "Dahua_NVR_cameraInfo", "Dahua_SD_card_info", "Dahua_SD_card_rec_info_list",
+            "cameraStatus", "hikvision_camera_status", "dahua_camera_status",
+            "ticketStatus", "iasBasFasStatus", "tlsAcsStatus",
+            "gatewayAlarmCreatedTime", "cctvAlarmCreatedTime", "iasAlarmCreatedTime",
+            "camera_tampered_last", "camera_disconnect_last",
+            "battery_low_last", "hdd_error_last", "power_off_last",
+            "integrated_alarm_fault_last", "integrated_alarm_off_last",
+            "integrated_alarm_activate_last", "Nvr_DVR_last", "dvr_nvr_off",
+            "gatewayType", "nvrType", "type"
+    );
+
+    /**
+     * Filter raw device attributes to keep only relevant data for the chatbot.
+     */
+    public static Map<String, Object> filterAttributes(Map<String, Object> rawData) {
+        if (rawData == null || rawData.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        int originalSize = rawData.size();
+        Map<String, Object> filtered = new HashMap<>();
+
+        for (Map.Entry<String, Object> entry : rawData.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
+            // Skip if explicitly excluded
+            if (shouldSkip(key)) {
+                continue;
+            }
+
+            // Keep if explicitly important
+            if (IMPORTANT_KEYS.contains(key)) {
+                String valueStr = String.valueOf(value);
+                if (isTooLarge(valueStr)) {
+                    filtered.put(key, simplifyValue(valueStr));
+                } else {
+                    filtered.put(key, value);
+                }
+                continue;
+            }
+
+            // For unknown keys, only keep if value is small and useful
+            String valueStr = String.valueOf(value);
+            if (valueStr.length() < 100 && !valueStr.equals("[]") && !valueStr.equals("{}")) {
+                filtered.put(key, value);
+            }
+        }
+
+        log.info("Context filtered: {} keys → {} keys (removed {} keys)",
+                originalSize, filtered.size(), originalSize - filtered.size());
+
+        return filtered;
+    }
+
+    /**
+     * Check if a key should be skipped entirely.
+     */
+    private static boolean shouldSkip(String key) {
+        if (SKIP_KEYS.contains(key)) {
+            return true;
+        }
+
+        for (String suffix : SKIP_SUFFIXES) {
+            if (key.endsWith(suffix)) {
+                return true;
+            }
+        }
+
+        for (String prefix : SKIP_PREFIXES) {
+            if (key.startsWith(prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a value string exceeds the maximum length.
+     */
+    private static boolean isTooLarge(String value) {
+        return value != null && value.length() > MAX_VALUE_LENGTH;
+    }
+
+    /**
+     * Simplify a large value by truncating or summarizing.
+     */
+    private static String simplifyValue(String value) {
+        if (value == null) return null;
+
+        String trimmed = value.trim();
+
+        // For JSON objects, try to keep the first part
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            return trimmed.substring(0, Math.min(250, trimmed.length())) + "...[truncated]";
+        }
+
+        return value.substring(0, Math.min(200, value.length())) + "...[truncated]";
+    }
+}
