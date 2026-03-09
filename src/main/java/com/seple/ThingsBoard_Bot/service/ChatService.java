@@ -85,7 +85,7 @@ public class ChatService {
             Map<String, Object> rawData;
             if (userToken != null && !userToken.isBlank()) {
                 List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
-                rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history);
+                rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history, sessionId);
             } else {
                 rawData = dataService.getDeviceData();
             }
@@ -241,7 +241,7 @@ public class ChatService {
      * Filters a list of user devices based on whether the device name 
      * is mentioned in the current question AND/OR previous conversational history.
      */
-    private Map<String, Object> filterDevicesForQuestion(List<Map<String, Object>> allDevices, String question, List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history) {
+    private Map<String, Object> filterDevicesForQuestion(List<Map<String, Object>> allDevices, String question, List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history, String sessionId) {
         if (allDevices == null || allDevices.isEmpty()) {
             return new HashMap<>();
         }
@@ -253,8 +253,9 @@ public class ChatService {
         }
         if (history != null) {
             for (com.seple.ThingsBoard_Bot.model.dto.ChatMessage msg : history) {
-                // Only scan user questions, not bot responses (in case bot listed all devices)
-                if ("user".equalsIgnoreCase(msg.getRole()) && msg.getContent() != null) {
+                // Scan both user questions AND bot responses. 
+                // If the bot says "CHINSURAH is inactive", we want to capture CHINSURAH as the active context!
+                if (msg.getContent() != null) {
                     contextText.append(msg.getContent().toLowerCase()).append(" ");
                 }
             }
@@ -275,17 +276,66 @@ public class ChatService {
             }
         }
         
-        Map<String, Object> flat = new java.util.HashMap<>();
+        Map<String, Object> flat = new HashMap<>();
         
-        // If matched specific devices, use those.
-        // If no match but less than 3 devices total, use all (small enough context).
-        // Otherwise, send a summary to force the user to specify to prevent token limits.
-        if (!matchedDevices.isEmpty()) {
-            flat = flattenDeviceList(matchedDevices);
-        } else if (allDevices.size() <= 2) {
+        boolean isGlobalQuery = false;
+        if (question != null) {
+            String currentQ = question.toLowerCase();
+            isGlobalQuery = currentQ.contains("all") || currentQ.contains("any") 
+                            || currentQ.contains("which") || currentQ.contains("my devices")
+                            || currentQ.contains("what") || currentQ.contains("how many")
+                            || currentQ.contains("list") || currentQ.contains("overview");
+        }
+        
+        // 1. If it's a generic overview query, send a highly summarized device list.
+        // This overrides any specific matched devices because the user is zooming out.
+        if (isGlobalQuery) {
+            chatMemoryService.setActiveDevices(sessionId, new ArrayList<>()); // clear active zoom
+            flat = flattenDeviceSummary(allDevices);
+            flat.put("SYSTEM_NOTE", "The user asked a general/overview question across all their devices. A lightweight summary of all devices is provided. Answer based on this summary. If their question requires detailed telemetry NOT present in this summary (like specific subsystem voltages or CPU stats), politely ask them to specify a precise device.");
+        } 
+        // 2. If matched specific devices, tightly bound how many we expand.
+        else if (!matchedDevices.isEmpty()) {
+            List<String> activeNames = new ArrayList<>();
+            for (Map<String, Object> md : matchedDevices) {
+                activeNames.add((String) md.getOrDefault("device_name", ""));
+            }
+            chatMemoryService.setActiveDevices(sessionId, activeNames);
+            
+            if (matchedDevices.size() <= 2) {
+                flat = flattenDeviceList(matchedDevices); // Safe to fully expand
+            } else {
+                flat = flattenDeviceSummary(matchedDevices); // Too many to expand safely
+                flat.put("SYSTEM_NOTE", "Multiple devices matched the context (" + matchedDevices.size() + "). A lightweight summary of these devices is provided to save tokens. Answer based on this summary. If detailed telemetry is needed for a specific device, ask the user to specify just one.");
+            }
+        } 
+        // 3. If no match but less than 3 devices total, use all (small enough context).
+        else if (allDevices.size() <= 2) {
             flat = flattenDeviceList(allDevices);
-        } else {
-            flat.put("SYSTEM_NOTE", "CRITICAL INSTRUCTION: There are too many devices (" + allDevices.size() + ") to show at once, and the user didn't specify one. You MUST reply by asking the user to specify which device they want to check (for example, refer to the available_devices_for_user_to_choose_from list). Do NOT say you don't have access to the data.");
+        } 
+        // 4. Fallback: Check if we have active devices stored in the session memory
+        else {
+            List<String> activeSessionDevices = chatMemoryService.getActiveDevices(sessionId);
+            if (!activeSessionDevices.isEmpty()) {
+                List<Map<String, Object>> sessionMatched = new ArrayList<>();
+                for (Map<String, Object> dev : allDevices) {
+                    if (activeSessionDevices.contains((String) dev.getOrDefault("device_name", ""))) {
+                        sessionMatched.add(dev);
+                    }
+                }
+                if (!sessionMatched.isEmpty()) {
+                    if (sessionMatched.size() <= 2) {
+                        flat = flattenDeviceList(sessionMatched);
+                    } else {
+                        flat = flattenDeviceSummary(sessionMatched);
+                        flat.put("SYSTEM_NOTE", "Multiple devices matched the context from previous session (" + sessionMatched.size() + "). A lightweight summary is provided to save tokens. Ask the user to specify one if they need full telemetry.");
+                    }
+                    return flat;
+                }
+            }
+
+            // 5. Still no match? Force the user to specify.
+            flat.put("SYSTEM_NOTE", "CRITICAL INSTRUCTION: There are too many devices (" + allDevices.size() + ") to show full telemetry for at once, and the user didn't specify one. You MUST reply by asking the user to specify which device they want to check (for example, refer to the available_devices_for_user_to_choose_from list). Do NOT say you don't have access to the data.");
             List<String> names = new ArrayList<>();
             for (Map<String, Object> dev : allDevices) {
                 names.add((String) dev.getOrDefault("device_name", "Unknown"));
@@ -301,7 +351,7 @@ public class ChatService {
      * Prefixes properties with device names if there are multiple devices.
      */
     private Map<String, Object> flattenDeviceList(List<Map<String, Object>> devices) {
-        Map<String, Object> flat = new java.util.HashMap<>();
+        Map<String, Object> flat = new HashMap<>();
         if (devices.size() == 1) {
             flat.putAll(devices.get(0));
         } else {
@@ -314,5 +364,27 @@ public class ChatService {
             }
         }
         return flat;
+    }
+
+    /**
+     * Creates a lightweight summary of all devices for global questions (battery, status, alarms)
+     * without exceeding LLM token limits when a user has many devices.
+     */
+    private Map<String, Object> flattenDeviceSummary(List<Map<String, Object>> devices) {
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("total_devices", devices.size());
+        for (Map<String, Object> dev : devices) {
+            String name = dev.getOrDefault("device_name", "unknown").toString();
+            if (dev.containsKey("battery_status")) summary.put(name + ".battery", dev.get("battery_status"));
+            if (dev.containsKey("status")) summary.put(name + ".status", dev.get("status"));
+            if (dev.containsKey("active")) summary.put(name + ".active", dev.get("active"));
+            if (dev.containsKey("alarmCount")) summary.put(name + ".alarms", dev.get("alarmCount"));
+            if (dev.containsKey("temperature")) summary.put(name + ".temp", dev.get("temperature"));
+            if (dev.containsKey("branchName")) summary.put(name + ".branch", dev.get("branchName"));
+            if (dev.containsKey("lastActivityTime")) summary.put(name + ".lastActivityTime", dev.get("lastActivityTime"));
+            if (dev.containsKey("lastConnectTime")) summary.put(name + ".lastConnectTime", dev.get("lastConnectTime"));
+            if (dev.containsKey("lastDisconnectTime")) summary.put(name + ".lastDisconnectTime", dev.get("lastDisconnectTime"));
+        }
+        return summary;
     }
 }

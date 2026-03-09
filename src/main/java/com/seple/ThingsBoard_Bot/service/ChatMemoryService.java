@@ -26,6 +26,9 @@ public class ChatMemoryService {
     // Maps a userToken (or sessionId) to a deque of ChatMessages
     private final Map<String, ConcurrentLinkedDeque<ChatMessage>> chatHistory = new ConcurrentHashMap<>();
     
+    // Maps a userToken to the list of device names they are currently discussing
+    private final Map<String, List<String>> activeDevices = new ConcurrentHashMap<>();
+    
     // Maximum number of messages to remember per user (2 Q&A pairs = 4 messages)
     private static final int MAX_HISTORY_MESSAGES = 4;
 
@@ -96,7 +99,28 @@ public class ChatMemoryService {
     public void clearHistory(String sessionId) {
         if (sessionId != null) {
             chatHistory.remove(sessionId);
-            log.debug("Cleared history for session '{}'", sessionId);
+            activeDevices.remove(sessionId);
+            log.debug("Cleared history and active devices for session '{}'", sessionId);
         }
+    }
+
+    /**
+     * Set the currently active devices for a session.
+     */
+    public void setActiveDevices(String sessionId, List<String> deviceNames) {
+        if (sessionId != null && deviceNames != null) {
+            activeDevices.put(sessionId, new ArrayList<>(deviceNames));
+            log.debug("Set active devices for session '{}' to {}", sessionId, deviceNames);
+        }
+    }
+
+    /**
+     * Get the currently active devices for a session.
+     */
+    public List<String> getActiveDevices(String sessionId) {
+        if (sessionId == null || !activeDevices.containsKey(sessionId)) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(activeDevices.get(sessionId));
     }
 }

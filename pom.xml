@@ -48,6 +48,12 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>io.pinecone</groupId>
+			<artifactId>pinecone-client</artifactId>
+			<version>5.1.0</version>
+		</dependency>
+
 		<!-- MySQL -->
 		<dependency>
 			<groupId>com.mysql</groupId>
