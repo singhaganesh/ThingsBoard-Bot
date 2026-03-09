@@ -65,7 +65,10 @@ public class ContextFilterUtil {
 
             // Counts
             "iasLastHour", "cctvLastHour", "fasLastHour", "gatewayLastHour",
-            "IASinactiveCOUNT", "IASfaultCOUNT"
+            "IASinactiveCOUNT", "IASfaultCOUNT",
+
+            // ChatBot Internal Flags
+            "SYSTEM_NOTE", "available_devices_for_user_to_choose_from"
     );
 
     // Suffixes of keys to always skip
@@ -131,7 +134,7 @@ public class ContextFilterUtil {
             // Keep if explicitly important
             if (IMPORTANT_KEYS.contains(key)) {
                 String valueStr = String.valueOf(value);
-                if (isTooLarge(valueStr)) {
+                if (isTooLarge(valueStr) && !key.equals("SYSTEM_NOTE") && !key.equals("available_devices_for_user_to_choose_from")) {
                     filtered.put(key, simplifyValue(valueStr));
                 } else {
                     filtered.put(key, value);

@@ -49,7 +49,8 @@ public class ChatService {
 
             Guidelines:
             - Be concise and informative
-            - If a value is not available in the context, say so honestly
+            - If a value is not available in the context, say so honestly, UNLESS a SYSTEM_NOTE tells you otherwise.
+            - If the context contains a SYSTEM_NOTE, you MUST follow its instructions exactly.
             - Use appropriate units when discussing sensor values
             - Highlight any concerning values (low battery, high temperature, alarms)
             - If asked about trends or history, mention that chart data can be requested
@@ -253,7 +254,7 @@ public class ChatService {
         } else if (allDevices.size() <= 2) {
             flat = flattenDeviceList(allDevices);
         } else {
-            flat.put("SYSTEM_NOTE", "The user has " + allDevices.size() + " devices. Their question did not specifying which device. DO NOT GUESS. Ask them to specify which device they mean.");
+            flat.put("SYSTEM_NOTE", "CRITICAL INSTRUCTION: There are too many devices (" + allDevices.size() + ") to show at once, and the user didn't specify one. You MUST reply by asking the user to specify which device they want to check (for example, refer to the available_devices_for_user_to_choose_from list). Do NOT say you don't have access to the data.");
             List<String> names = new ArrayList<>();
             for (Map<String, Object> dev : allDevices) {
                 names.add((String) dev.getOrDefault("device_name", "Unknown"));
