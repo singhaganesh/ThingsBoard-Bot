@@ -1,6 +1,6 @@
 # ThingsBoard Bot
 
-An AI-powered chatbot assistant for ThingsBoard IoT platforms. This bot connects to your ThingsBoard tenant, retrieves telemetry and attribute data from your devices, and uses OpenAI to provide insightful answers and real-time alerts.
+An AI-powered chatbot assistant for ThingsBoard IoT platforms. This bot connects to your ThingsBoard tenant, retrieves telemetry and attribute data from your devices, and uses OpenAI to provide insightful answers about your IoT devices.
 
 ## Architecture Overview
 
@@ -13,7 +13,7 @@ An AI-powered chatbot assistant for ThingsBoard IoT platforms. This bot connects
 ┌──────────────────────────▼──────────────────────────────────────────┐
 │                      Spring Boot Backend                            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │ ChatController│  │AlertController│ │DataController│            │
+│  │ ChatController│  │DataController│  │              │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
 │         │                 │                  │                      │
 │  ┌──────▼─────────────────▼──────────────────▼───────┐             │
@@ -55,16 +55,10 @@ An AI-powered chatbot assistant for ThingsBoard IoT platforms. This bot connects
 - Supports both **Tenant Admin** (all devices) and **Customer/User** (scoped devices via `X-TB-Token`)
 - Device data includes: telemetry, CLIENT_SCOPE attributes, SERVER_SCOPE attributes, SHARED_SCOPE attributes
 
-### 3. Alert Flow
-- [`AlertService`](src/main/java/com/seple/ThingsBoard_Bot/service/AlertService.java) polls ThingsBoard for alerts
-- Checks battery levels, temperature, connection status
-- Can be polled via [`AlertController`](src/main/java/com/seple/ThingsBoard_Bot/controller/AlertController.java)
-
 ## Features
 
 - **Context-Aware Q&A:** Ask questions about your IoT devices, their status, health, and recent telemetry.
 - **Multi-Device Support:** Retrieve data across multiple devices within your tenant.
-- **Real-time Alerts:** Automatically polls for and displays active alerts from ThingsBoard.
 - **Floating Chat Widget:** A sleek, "Acid Industrial" themed chat interface.
 - **Smart Data Filtering:** Aggressively filters raw JSON data to minimize OpenAI token usage.
 - **Caching:** 1-minute caching for device data to optimize performance.
@@ -128,7 +122,6 @@ java -jar target/ThingsBoard-Bot-0.0.1-SNAPSHOT.jar
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/v1/chat/ask` | POST | Send a question to the chatbot |
-| `/api/v1/alerts/check` | GET | Check for active device alerts |
 | `/api/v1/data/full` | GET | Get full device data (unfiltered) |
 | `/api/v1/data/all-devices` | GET | Get list of all devices |
 
@@ -153,11 +146,9 @@ src/main/java/com/seple/ThingsBoard_Bot/
 │   └── ChatbotConfig.java            # Chatbot settings
 ├── controller/                       # REST controllers
 │   ├── ChatController.java           # /api/v1/chat
-│   ├── AlertController.java          # /api/v1/alerts
 │   └── DataController.java           # /api/v1/data
 ├── service/                          # Business logic
 │   ├── ChatService.java              # Main chatbot logic
-│   ├── AlertService.java             # Alert checking
 │   ├── DataService.java              # Device data fetching
 │   ├── UserDataService.java          # User-scoped data
 │   └── ChatMemoryService.java        # Conversation history

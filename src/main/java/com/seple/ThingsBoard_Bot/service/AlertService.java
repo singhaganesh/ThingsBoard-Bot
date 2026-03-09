@@ -165,14 +165,24 @@ public class AlertService {
             alerts.add("🚨 " + alarmCount + " active alarm(s) detected!");
         }
 
-        // Check system status
-        String status = data.get("system_status") != null
-                ? data.get("system_status").toString()
-                : (data.get("active") != null ? data.get("active").toString() : null);
-        if (status != null && !status.equalsIgnoreCase("online")
-                && !status.equalsIgnoreCase("true")
-                && !status.equalsIgnoreCase("active")) {
-            alerts.add("❌ Device status: " + status);
+        // Check system status - only for simple String values, not Maps/Objects
+        Object statusObj = data.get("system_status");
+        if (statusObj != null && statusObj instanceof String) {
+            String status = statusObj.toString();
+            if (!status.equalsIgnoreCase("online")
+                    && !status.equalsIgnoreCase("true")
+                    && !status.equalsIgnoreCase("active")) {
+                alerts.add("❌ Device status: " + status);
+            }
+        }
+        
+        // Check gateway status (for IoT gateways)
+        Object gwStatusObj = data.get("gwStatus");
+        if (gwStatusObj != null && gwStatusObj instanceof String) {
+            String gwStatus = gwStatusObj.toString();
+            if (gwStatus.equalsIgnoreCase("Offline")) {
+                alerts.add("📡 Gateway is OFFLINE");
+            }
         }
 
         // Check CPU

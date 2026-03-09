@@ -385,9 +385,45 @@
             height: 18px;
         }
 
-        /* ========== Alert Banner ========== */
+        /* ========== Alert Indicator (Top Bar) ========== */
+        .alert-indicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(90deg, #ff4444, #ff6b6b);
+            color: white;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            z-index: 10;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .alert-indicator .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        /* Hide old alert banner completely */
         .alert-banner {
-            background: rgba(212, 243, 74, 0.08);
+            display: none !important;
+        }
+
+        /* ========== Chat Window ========== */
+        .chat-window {
             border-bottom: 1px solid rgba(212, 243, 74, 0.15);
             padding: 8px 16px;
             font-size: 12px;
@@ -478,13 +514,6 @@
             </div>
         </div>
 
-        <!-- Alert Banner -->
-        <div class="alert-banner" id="alert-banner">
-            <span class="alert-icon">⚡</span>
-            <span class="alert-text" id="alert-text"></span>
-            <button class="alert-dismiss" onclick="dismissAlert()">×</button>
-        </div>
-
         <!-- Messages -->
         <div class="chat-messages" id="chat-messages">
             <div class="welcome-msg">
@@ -516,8 +545,6 @@
         // Point to the Spring Boot backend port (default 8080)
         const API_BASE = 'http://localhost:8080';
         const CHAT_ENDPOINT = `${API_BASE}/api/v1/chat/ask`;
-        const ALERT_ENDPOINT = `${API_BASE}/api/v1/alerts/check`;
-        const ALERT_POLL_INTERVAL = 15000; // 15 seconds
 
         // ========== DOM Elements ==========
         const toggleBtn = document.getElementById('chatbot-toggle');
@@ -536,6 +563,7 @@
             isOpen = !isOpen;
             chatWindow.classList.toggle('open', isOpen);
             toggleBtn.classList.toggle('active', isOpen);
+            if (isOpen) onChatOpen();
 
             if (isOpen) {
                 chatInput.focus();
@@ -674,37 +702,6 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             });
         }
-
-        // ========== Alert Polling ==========
-        async function checkAlerts() {
-            try {
-                const headers = {};
-                const token = localStorage.getItem('jwt_token');
-                if (token) headers['X-TB-Token'] = token;
-
-                const response = await fetch(ALERT_ENDPOINT, { headers });
-                if (!response.ok) return;
-
-                const data = await response.json();
-
-                if (data.hasAlert && data.alerts && data.alerts.length > 0) {
-                    alertText.textContent = data.alerts[0];
-                    alertBanner.classList.add('show');
-                } else {
-                    alertBanner.classList.remove('show');
-                }
-            } catch (e) {
-                // Silently ignore alert polling errors
-            }
-        }
-
-        function dismissAlert() {
-            alertBanner.classList.remove('show');
-        }
-
-        // Start polling alerts
-        checkAlerts();
-        setInterval(checkAlerts, ALERT_POLL_INTERVAL);
 
         // ========== Keyboard shortcut ==========
         document.addEventListener('keydown', (e) => {
