@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.text.SimpleDateFormat;
+import java.util.TimeZone;
 
 import org.springframework.stereotype.Service;
 
@@ -56,6 +58,8 @@ public class ChatService {
             - Highlight any concerning values (low battery, high temperature, alarms)
             - If asked about trends or history, mention that chart data can be requested
             - Format numbers nicely (e.g., "67%" not "67.0")
+            - CRITICAL RULE FOR ONLINE STATUS: A branch or device is ONLY "Online" or "Active" if its `gateway` or `gwStatus` value is "Online" or "On". If `gateway`/`gwStatus` is "Offline" or missing, the branch is OFFLINE and INACTIVE. Do NOT claim it is active just because individual subsystems (like `integratedStatus` or `accessControl`) report "Healthy" or "true", as those are likely stale offline readings!
+            - When answering questions about "how many" or "which" devices are inactive using summarized data, count ONLY the devices that have a `gwStatus` or `gateway` property explicitly stating they are offline/inactive. If a device has `[deviceName].gwStatus = Offline`, it is inactive.
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -381,10 +385,71 @@ public class ChatService {
             if (dev.containsKey("alarmCount")) summary.put(name + ".alarms", dev.get("alarmCount"));
             if (dev.containsKey("temperature")) summary.put(name + ".temp", dev.get("temperature"));
             if (dev.containsKey("branchName")) summary.put(name + ".branch", dev.get("branchName"));
-            if (dev.containsKey("lastActivityTime")) summary.put(name + ".lastActivityTime", dev.get("lastActivityTime"));
-            if (dev.containsKey("lastConnectTime")) summary.put(name + ".lastConnectTime", dev.get("lastConnectTime"));
-            if (dev.containsKey("lastDisconnectTime")) summary.put(name + ".lastDisconnectTime", dev.get("lastDisconnectTime"));
+            if (dev.containsKey("gwStatus")) summary.put(name + ".gwStatus", dev.get("gwStatus"));
+            if (dev.containsKey("gwHealth")) summary.put(name + ".gwHealth", dev.get("gwHealth"));
+            if (dev.containsKey("gateway")) summary.put(name + ".gateway", dev.get("gateway"));
+            if (dev.containsKey("gatewayStatus")) summary.put(name + ".gatewayStatus", dev.get("gatewayStatus"));
+            if (dev.containsKey("iasStatus")) summary.put(name + ".iasStatus", dev.get("iasStatus"));
+            if (dev.containsKey("fasStatus")) summary.put(name + ".fasStatus", dev.get("fasStatus"));
+            if (dev.containsKey("basStatus")) summary.put(name + ".basStatus", dev.get("basStatus"));
+            if (dev.containsKey("cctvStatus")) summary.put(name + ".cctvStatus", dev.get("cctvStatus"));
+            if (dev.containsKey("cameraStatus")) summary.put(name + ".cameraStatus", dev.get("cameraStatus"));
+            if (dev.containsKey("integratedStatus")) summary.put(name + ".integratedStatus", dev.get("integratedStatus"));
+            if (dev.containsKey("accessControlStatus")) summary.put(name + ".accessControlStatus", dev.get("accessControlStatus"));
+            if (dev.containsKey("timeLockHealth")) summary.put(name + ".timeLockHealth", dev.get("timeLockHealth"));
+            
+            // Format timestamps to human-readable format
+            if (dev.containsKey("lastActivityTime")) {
+                Object activityTime = dev.get("lastActivityTime");
+                summary.put(name + ".lastActivityTime", formatTimestamp(activityTime));
+            }
+            if (dev.containsKey("lastConnectTime")) {
+                Object connectTime = dev.get("lastConnectTime");
+                summary.put(name + ".lastConnectTime", formatTimestamp(connectTime));
+            }
+            if (dev.containsKey("lastDisconnectTime")) {
+                Object disconnectTime = dev.get("lastDisconnectTime");
+                summary.put(name + ".lastDisconnectTime", formatTimestamp(disconnectTime));
+            }
         }
         return summary;
+    }
+    
+    /**
+     * Convert epoch milliseconds to human-readable date/time format.
+     * Returns the original value if it's not a valid epoch timestamp.
+     */
+    private Object formatTimestamp(Object value) {
+        if (value == null) {
+            return null;
+        }
+        
+        try {
+            // Try to parse as Long (epoch milliseconds)
+            long timestamp;
+            if (value instanceof Number) {
+                timestamp = ((Number) value).longValue();
+            } else {
+                String strValue = value.toString().trim();
+                // Check if it looks like an epoch timestamp (13+ digits for milliseconds)
+                if (!strValue.matches("\\d{13,}")) {
+                    return value; // Not a timestamp
+                }
+                timestamp = Long.parseLong(strValue);
+            }
+            
+            // Validate it's a reasonable timestamp (between 2000 and 2100)
+            if (timestamp < 946684800000L || timestamp > 4102444800000L) {
+                return value; // Outside reasonable range
+            }
+            
+            // Format to human-readable
+            SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy, HH:mm:ss");
+            sdf.setTimeZone(TimeZone.getTimeZone("IST")); // India Standard Time
+            return sdf.format(new java.util.Date(timestamp));
+        } catch (Exception e) {
+            log.debug("Failed to format timestamp: {}", value, e);
+            return value; // Return original on any error
+        }
     }
 }

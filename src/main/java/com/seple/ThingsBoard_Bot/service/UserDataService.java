@@ -81,6 +81,10 @@ public class UserDataService {
 
         for (Map<String, String> device : devices) {
             String deviceId = device.get("id");
+            if (deviceId == null || deviceId.isBlank() || "null".equals(deviceId)) {
+                log.warn("⚠️ Skipping device with missing or null ID: {}", device);
+                continue;
+            }
             Map<String, Object> deviceData = new HashMap<>();
 
             // Basic info

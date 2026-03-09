@@ -135,9 +135,20 @@ public class UserAwareThingsBoardClient {
                 if (dataArray != null && dataArray.isArray()) {
                     for (JsonNode deviceNode : dataArray) {
                         Map<String, String> deviceMap = new HashMap<>();
-                        // Entity Query returns { "entityId": {"id":"..."}, "latest": {...} }
+                        // Extract ID: ThingsBoard might return {"entityId": {"id": "..."}} OR {"id": {"id": "..."}} OR just {"id": "uuid..."}
+                        JsonNode idNode = null;
                         if (deviceNode.has("entityId")) {
-                            deviceMap.put("id", deviceNode.get("entityId").get("id").asText());
+                            idNode = deviceNode.get("entityId");
+                        } else if (deviceNode.has("id")) {
+                            idNode = deviceNode.get("id");
+                        }
+
+                        if (idNode != null) {
+                            if (idNode.has("id")) {
+                                deviceMap.put("id", idNode.get("id").asText());
+                            } else if (idNode.isTextual()) {
+                                deviceMap.put("id", idNode.asText());
+                            }
                         }
                         
                         // Fields returned might be arrays in latest -> ENTITY_FIELD

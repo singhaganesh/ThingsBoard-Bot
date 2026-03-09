@@ -40,8 +40,8 @@ public class ContextFilterUtil {
             "integratedStatus", "integratedType",
             "basHealth", "basStatus", "bas", "basSystem",
             "timeLockHealth", "timeLock",
-            "accessControlHealth", "accessControl",
-            "cameraLinkStatus", "gatewayStatus",
+            "accessControlHealth", "accessControl", "accessControlStatus",
+            "cameraLinkStatus", "gatewayStatus", "cameraStatus", "hikvision_camera_status", "dahua_camera_status",
 
             // Alarms
             "alarmCount", "severity", "alerts", "errorCount",
@@ -100,12 +100,6 @@ public class ContextFilterUtil {
             "Hikvision_NVR_cameraInfo", "Hikvision_NVR_Date", "Hikvision_NVR_Time",
             "Hikvision_NVR_Manufacturer", "Hikvision_NVR_deviceType",
             "Hik_SD_card_info", "Hik_SD_card_rec_info_list",
-            "Dahua_NVR_cameraInfo", "Dahua_SD_card_info", "Dahua_SD_card_rec_info_list",
-            "cameraStatus", "hikvision_camera_status", "dahua_camera_status",
-            "ticketStatus", "iasBasFasStatus", "tlsAcsStatus",
-            "gatewayAlarmCreatedTime", "cctvAlarmCreatedTime", "iasAlarmCreatedTime",
-            "camera_tampered_last", "camera_disconnect_last",
-            "battery_low_last", "hdd_error_last", "power_off_last",
             "integrated_alarm_fault_last", "integrated_alarm_off_last",
             "integrated_alarm_activate_last", "Nvr_DVR_last", "dvr_nvr_off",
             "gatewayType", "nvrType", "type"
@@ -123,21 +117,27 @@ public class ContextFilterUtil {
         Map<String, Object> filtered = new HashMap<>();
 
         for (Map.Entry<String, Object> entry : rawData.entrySet()) {
-            String key = entry.getKey();
+            String fullKey = entry.getKey();
             Object value = entry.getValue();
 
+            // Extract the actual key if it's prefixed with deviceName. (e.g., "DEVICE-A.battery_status" -> "battery_status")
+            String actualKey = fullKey;
+            if (fullKey.contains(".")) {
+                actualKey = fullKey.substring(fullKey.lastIndexOf(".") + 1);
+            }
+
             // Skip if explicitly excluded
-            if (shouldSkip(key)) {
+            if (shouldSkip(actualKey, fullKey)) {
                 continue;
             }
 
             // Keep if explicitly important
-            if (IMPORTANT_KEYS.contains(key)) {
+            if (IMPORTANT_KEYS.contains(actualKey) || IMPORTANT_KEYS.contains(fullKey)) {
                 String valueStr = String.valueOf(value);
-                if (isTooLarge(valueStr) && !key.equals("SYSTEM_NOTE") && !key.equals("available_devices_for_user_to_choose_from")) {
-                    filtered.put(key, simplifyValue(valueStr));
+                if (isTooLarge(valueStr) && !actualKey.equals("SYSTEM_NOTE") && !actualKey.equals("available_devices_for_user_to_choose_from")) {
+                    filtered.put(fullKey, simplifyValue(valueStr));
                 } else {
-                    filtered.put(key, value);
+                    filtered.put(fullKey, value);
                 }
                 continue;
             }
@@ -145,7 +145,7 @@ public class ContextFilterUtil {
             // For unknown keys, only keep if value is small and useful
             String valueStr = String.valueOf(value);
             if (valueStr.length() < 100 && !valueStr.equals("[]") && !valueStr.equals("{}")) {
-                filtered.put(key, value);
+                filtered.put(fullKey, value);
             }
         }
 
@@ -158,19 +158,19 @@ public class ContextFilterUtil {
     /**
      * Check if a key should be skipped entirely.
      */
-    private static boolean shouldSkip(String key) {
-        if (SKIP_KEYS.contains(key)) {
+    private static boolean shouldSkip(String actualKey, String fullKey) {
+        if (SKIP_KEYS.contains(actualKey) || SKIP_KEYS.contains(fullKey)) {
             return true;
         }
 
         for (String suffix : SKIP_SUFFIXES) {
-            if (key.endsWith(suffix)) {
+            if (actualKey.endsWith(suffix) || fullKey.endsWith(suffix)) {
                 return true;
             }
         }
 
         for (String prefix : SKIP_PREFIXES) {
-            if (key.startsWith(prefix)) {
+            if (actualKey.startsWith(prefix) || fullKey.startsWith(prefix)) {
                 return true;
             }
         }

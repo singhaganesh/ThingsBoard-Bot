@@ -105,8 +105,12 @@ public class AlertService {
                 List<Map<String, String>> devices = userDataService.getUserDevicesList(userToken);
                 
                 for (Map<String, String> device : devices) {
-                    String deviceId = device.get("device_id");
-                    String deviceName = device.get("device_name");
+                    String deviceId = device.get("id");
+                    String deviceName = device.get("name");
+                    
+                    if (deviceId == null || deviceId.isBlank() || "null".equals(deviceId)) {
+                        continue;
+                    }
                     
                     Map<String, Object> liveData = userTbClient.getTelemetry(userToken, deviceId);
                     List<String> deviceAlerts = evaluateAlerts(liveData);
