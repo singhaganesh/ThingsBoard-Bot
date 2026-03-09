@@ -39,14 +39,22 @@ public class OpenAIClient {
     }
 
     /**
-     * Send a chat completion request to OpenAI.
-     *
-     * @param systemPrompt The system message defining the AI's role
-     * @param userMessage  The user's question with context
-     * @return The AI's response text
+     * Send a chat completion request to OpenAI natively.
      */
     public String chat(String systemPrompt, String userMessage) {
-        log.debug("Calling OpenAI {} with {} char message", config.getModel(), userMessage.length());
+        return chat(systemPrompt, new ArrayList<>(), userMessage);
+    }
+
+    /**
+     * Send a chat completion request to OpenAI with Conversation History injected natively into the payload.
+     *
+     * @param systemPrompt The system message defining the AI's role
+     * @param history      The previous user/assistant interaction history
+     * @param userMessage  The user's NEW question with context
+     * @return The AI's response text
+     */
+    public String chat(String systemPrompt, List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history, String userMessage) {
+        log.debug("Calling OpenAI {} with {} char message & {} char history", config.getModel(), userMessage.length(), history != null ? history.size() : 0);
 
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -66,6 +74,16 @@ public class OpenAIClient {
             systemMsg.put("role", "system");
             systemMsg.put("content", systemPrompt);
             messages.add(systemMsg);
+
+            // Inject History BEFORE the final user question
+            if (history != null && !history.isEmpty()) {
+                for (com.seple.ThingsBoard_Bot.model.dto.ChatMessage msg : history) {
+                    Map<String, String> hm = new HashMap<>();
+                    hm.put("role", msg.getRole());
+                    hm.put("content", msg.getContent());
+                    messages.add(hm);
+                }
+            }
 
             Map<String, String> userMsg = new HashMap<>();
             userMsg.put("role", "user");

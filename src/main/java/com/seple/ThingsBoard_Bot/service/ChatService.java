@@ -38,6 +38,7 @@ public class ChatService {
     private final UserDataService userDataService;
     private final OpenAIClient openAIClient;
     private final ChartService chartService;
+    private final ChatMemoryService chatMemoryService;
     private final ObjectMapper objectMapper;
 
     private static final String SYSTEM_PROMPT = """
@@ -57,11 +58,12 @@ public class ChatService {
             - Format numbers nicely (e.g., "67%" not "67.0")
             """;
 
-    public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService) {
+    public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
         this.dataService = dataService;
         this.userDataService = userDataService;
         this.openAIClient = openAIClient;
         this.chartService = chartService;
+        this.chatMemoryService = chatMemoryService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -75,11 +77,15 @@ public class ChatService {
                 request.getQuestion(), userToken != null ? "present" : "absent");
 
         try {
+            // Step 3.5: Fetch Session History (Moved UP so filter can use it)
+            String sessionId = (userToken != null && !userToken.isBlank()) ? userToken : "default-session";
+            List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history = chatMemoryService.getHistory(sessionId);
+
             // Step 1: Get device data (from user cache or fallback to default cache)
             Map<String, Object> rawData;
             if (userToken != null && !userToken.isBlank()) {
                 List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
-                rawData = filterDevicesForQuestion(allDevices, request.getQuestion());
+                rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history);
             } else {
                 rawData = dataService.getDeviceData();
             }
@@ -92,21 +98,32 @@ public class ChatService {
             // Step 3: Convert to JSON string for the prompt
             String contextJson = objectMapper.writeValueAsString(filteredData);
 
-            // Step 4: Count tokens and validate
+            // Step 4: Count tokens and validate (with history)
             int totalTokens = TokenCounterService.countMessageTokens(
-                    SYSTEM_PROMPT, request.getQuestion(), contextJson);
+                    SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
+
+            // If we exceed context block, discard history one by one until it fits
+            while (!TokenCounterService.fitsInContextWindow(totalTokens) && !history.isEmpty()) {
+                chatMemoryService.removeOldestMessage(sessionId);
+                history = chatMemoryService.getHistory(sessionId);
+                totalTokens = TokenCounterService.countMessageTokens(
+                        SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
+            }
 
             if (!TokenCounterService.fitsInContextWindow(totalTokens)) {
                 throw new ContextOverflowException(
-                        "Context too large: " + totalTokens + " tokens (max 6000)");
+                        "Context too large: " + totalTokens + " tokens (max 6000). Try asking about a specific device.");
             }
 
             // Step 5: Build the user message with context
             String userMessage = "Device Data Context:\n" + contextJson
                     + "\n\nUser Question: " + request.getQuestion();
 
-            // Step 6: Call OpenAI
-            String answer = openAIClient.chat(SYSTEM_PROMPT, userMessage);
+            // Step 6: Call OpenAI with Context + History + New Question
+            String answer = openAIClient.chat(SYSTEM_PROMPT, history, userMessage);
+
+            // Record this interaction into the sliding window memory
+            chatMemoryService.recordInteraction(sessionId, request.getQuestion(), answer);
 
             // Step 7: Generate chart if requested
             ChartData chartData = null;
@@ -222,14 +239,28 @@ public class ChatService {
 
     /**
      * Filters a list of user devices based on whether the device name 
-     * is mentioned in the question.
+     * is mentioned in the current question AND/OR previous conversational history.
      */
-    private Map<String, Object> filterDevicesForQuestion(List<Map<String, Object>> allDevices, String question) {
+    private Map<String, Object> filterDevicesForQuestion(List<Map<String, Object>> allDevices, String question, List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history) {
         if (allDevices == null || allDevices.isEmpty()) {
             return new HashMap<>();
         }
         
-        String qLower = question == null ? "" : question.toLowerCase();
+        // Build a combined 'contextual text' wall from the current question + past questions
+        StringBuilder contextText = new StringBuilder();
+        if (question != null) {
+            contextText.append(question.toLowerCase()).append(" ");
+        }
+        if (history != null) {
+            for (com.seple.ThingsBoard_Bot.model.dto.ChatMessage msg : history) {
+                // Only scan user questions, not bot responses (in case bot listed all devices)
+                if ("user".equalsIgnoreCase(msg.getRole()) && msg.getContent() != null) {
+                    contextText.append(msg.getContent().toLowerCase()).append(" ");
+                }
+            }
+        }
+        String qLower = contextText.toString();
+        
         List<Map<String, Object>> matchedDevices = new ArrayList<>();
         
         for (Map<String, Object> dev : allDevices) {

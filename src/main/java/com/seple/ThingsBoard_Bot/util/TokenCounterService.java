@@ -30,16 +30,24 @@ public class TokenCounterService {
     }
 
     /**
-     * Count total tokens across system prompt, user question, and context.
+     * Count total tokens across system prompt, history, user question, and context.
      */
-    public static int countMessageTokens(String systemPrompt, String question, String contextJson) {
+    public static int countMessageTokens(String systemPrompt, java.util.List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history, String question, String contextJson) {
         int systemTokens = estimateTokens(systemPrompt);
         int questionTokens = estimateTokens(question);
         int contextTokens = estimateTokens(contextJson);
-        int total = systemTokens + questionTokens + contextTokens;
+        
+        int historyTokens = 0;
+        if (history != null) {
+            for (com.seple.ThingsBoard_Bot.model.dto.ChatMessage msg : history) {
+                historyTokens += estimateTokens(msg.getContent());
+            }
+        }
+        
+        int total = systemTokens + historyTokens + questionTokens + contextTokens;
 
-        log.debug("Token count — system: {}, question: {}, context: {}, TOTAL: {}",
-                systemTokens, questionTokens, contextTokens, total);
+        log.debug("Token count — sys: {}, hist: {}, q: {}, ctx: {}, TOTAL: {}",
+                systemTokens, historyTokens, questionTokens, contextTokens, total);
 
         return total;
     }
