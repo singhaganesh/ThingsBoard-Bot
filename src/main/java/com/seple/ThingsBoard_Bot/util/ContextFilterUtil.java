@@ -63,6 +63,10 @@ public class ContextFilterUtil {
             // Uptime
             "uptimeTotal", "uptimeHeartbeat", "gatewayUptime",
 
+            // Connectivity & Activity
+            "lastActivityTime", "lastConnectTime", "lastDisconnectTime",
+            "lastHeartbeat", "lastTelemetryTime", "lastUpdated",
+
             // Counts
             "iasLastHour", "cctvLastHour", "fasLastHour", "gatewayLastHour",
             "IASinactiveCOUNT", "IASfaultCOUNT",

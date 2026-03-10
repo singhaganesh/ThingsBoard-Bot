@@ -60,6 +60,26 @@ public class ChatService {
             - Format numbers nicely (e.g., "67%" not "67.0")
             - CRITICAL RULE FOR ONLINE STATUS: A branch or device is ONLY "Online" or "Active" if its `gateway` or `gwStatus` value is "Online" or "On". If `gateway`/`gwStatus` is "Offline" or missing, the branch is OFFLINE and INACTIVE. Do NOT claim it is active just because individual subsystems (like `integratedStatus` or `accessControl`) report "Healthy" or "true", as those are likely stale offline readings!
             - When answering questions about "how many" or "which" devices are inactive using summarized data, count ONLY the devices that have a `gwStatus` or `gateway` property explicitly stating they are offline/inactive. If a device has `[deviceName].gwStatus = Offline`, it is inactive.
+            
+            OUTPUT FORMAT:
+            - When counting devices: "X out of Y devices are [status]"
+            - List specific device/branch names with their status
+            - Always cite the actual values from the data
+            - If uncertain, say "Based on the data provided..."
+            - For status questions, provide a clear yes/no or list of statuses
+            
+            EXAMPLES:
+            - User: "How many branches are offline?"
+              Context: BOI-DANKUNI.gateway=Online, BOI-CHANDANNAGAR.gateway=Offline, BOI-ARAMBAGH.gateway=Offline
+              Bot: "2 out of 3 branches are offline: BOI-CHANDANNAGAR and BOI-ARAMBAGH"
+            
+            - User: "Show me battery status"
+              Context: BOI-DANKUNI.battery_status=OK, BOI-CHANDANNAGAR.battery_status=Low
+              Bot: "Battery Status:\n- BOI-DANKUNI: OK\n- BOI-CHANDANNAGAR: Low (needs attention)"
+            
+            - User: "Which devices have alarms?"
+              Context: BOI-DANKUNI.alarmCount=0, BOI-CHANDANNAGAR.alarmCount=3
+              Bot: "1 device has active alarms: BOI-CHANDANNAGAR (3 alarms)"
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -120,7 +140,10 @@ public class ChatService {
             }
 
             // Step 5: Build the user message with context
+            // Add query-type specific instructions to guide the AI
+            String queryInstruction = detectQueryInstructions(request.getQuestion(), filteredData);
             String userMessage = "Device Data Context:\n" + contextJson
+                    + "\n\n" + queryInstruction
                     + "\n\nUser Question: " + request.getQuestion();
 
             // Step 6: Call OpenAI with Context + History + New Question
@@ -239,6 +262,56 @@ public class ChatService {
                 .filter(k -> k.toLowerCase().contains(keyword))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Detect query type and add specific instructions to guide the AI response.
+     * This helps ensure accurate answers for different types of questions.
+     */
+    private String detectQueryInstructions(String question, Map<String, Object> data) {
+        if (question == null || question.isBlank()) {
+            return "";
+        }
+        
+        String q = question.toLowerCase();
+        StringBuilder instructions = new StringBuilder();
+        
+        // Count queries - focus on gateway status
+        if (q.contains("how many") || q.contains("count") || q.contains("number of")) {
+            if (q.contains("offline") || q.contains("inactive") || q.contains("not working") || q.contains("down")) {
+                instructions.append("\nCRITICAL: Count only devices where gateway='Offline' or gwStatus='Offline'. ");
+                instructions.append("Do NOT count devices as offline just because subsystems show issues. ");
+                instructions.append("The gateway status is the definitive indicator. ");
+            } else if (q.contains("online") || q.contains("active") || q.contains("working")) {
+                instructions.append("\nCRITICAL: Count only devices where gateway='Online' or gwStatus='Online'. ");
+            }
+        }
+        
+        // Which queries - list specific devices
+        if (q.contains("which") || q.contains("list")) {
+            if (q.contains("offline") || q.contains("inactive") || q.contains("not working")) {
+                instructions.append("\nList the specific device/branch names that have gateway='Offline' or gwStatus='Offline'. ");
+            } else if (q.contains("battery") || q.contains("alarm")) {
+                instructions.append("\nList each device with its specific value (e.g., 'BOI-DANKUNI: OK, BOI-CHANDANNAGAR: Low'). ");
+            }
+        }
+        
+        // Status queries - provide clear yes/no
+        if (q.contains("is there") || q.contains("are there") || q.contains("does") || q.contains("do any")) {
+            instructions.append("\nAnswer with a clear yes/no followed by specific examples if applicable. ");
+        }
+        
+        // Battery/power queries
+        if (q.contains("battery") || q.contains("power") || q.contains("mains")) {
+            instructions.append("\nHighlight any devices with 'Low', 'Critical', or 'Reverse' battery status. ");
+        }
+        
+        // Alarm queries
+        if (q.contains("alarm") || q.contains("alert")) {
+            instructions.append("\nList devices with alarmCount > 0 and mention the alarm count. ");
+        }
+        
+        return instructions.toString();
     }
 
     /**
