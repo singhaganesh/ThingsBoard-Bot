@@ -2,50 +2,131 @@ package com.seple.ThingsBoard_Bot.service;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import jakarta.annotation.PostConstruct;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.seple.ThingsBoard_Bot.client.ThingsBoardClient;
 
-import lombok.extern.slf4j.Slf4j;
-
 /**
- * DataService with 1-MINUTE in-memory caching.
+ * DataService with 5-MINUTE in-memory caching + background refresh.
  * <p>
  * This is the core caching layer. All Q&A queries go through this service.
- * Alerts use their own separate refresh cycle (10 seconds) and bypass this cache.
+ * Data is refreshed in background every 4 minutes (before TTL expires).
+ * Users always get instant responses from cache.
  * </p>
  */
-@Slf4j
 @Service
 public class DataService {
 
+    private static final Logger log = LoggerFactory.getLogger(DataService.class);
     private final ThingsBoardClient tbClient;
 
     // Cache storage
     private Map<String, Object> cachedData;
     private long lastCacheTime;
+    private final AtomicBoolean isRefreshing = new AtomicBoolean(false);
 
-    // 1-MINUTE TTL
-    private static final long CACHE_TTL_MS = 60 * 1000;
+    // 5-MINUTE TTL (data stays fresh for 5 minutes)
+    private static final long CACHE_TTL_MS = 5 * 60 * 1000;
+    // Refresh threshold (refresh in background when 80% of TTL elapsed)
+    private static final long REFRESH_THRESHOLD_MS = CACHE_TTL_MS * 80 / 100;
 
     public DataService(ThingsBoardClient tbClient) {
         this.tbClient = tbClient;
+        // Pre-load cache on startup (async to not block app startup)
+        log.info("🚀 Initializing DataService with background refresh (5-min TTL)...");
+        initializeCacheAsync();
     }
 
     /**
-     * Get device data. Returns cached data if valid (< 1 minute old),
-     * otherwise fetches fresh data from ThingsBoard.
+     * Initialize cache asynchronously to avoid blocking application startup.
+     */
+    @PostConstruct
+    public void initializeCacheAsync() {
+        Thread initThread = new Thread(() -> {
+            try {
+                refreshCacheSync();
+                log.info("✅ Initial cache loaded successfully");
+            } catch (Exception e) {
+                log.warn("⚠️ Initial cache load failed (will retry on first request): {}", e.getMessage());
+            }
+        }, "DataService-Init");
+        initThread.start();
+    }
+
+    /**
+     * Get device data. ALWAYS returns cached data instantly.
+     * Background refresh happens automatically when cache is about to expire.
      */
     public synchronized Map<String, Object> getDeviceData() {
-        if (isCacheValid()) {
+        // Always return cached data instantly (even if stale)
+        if (cachedData != null) {
             long ageSeconds = (System.currentTimeMillis() - lastCacheTime) / 1000;
-            long expiresIn = (CACHE_TTL_MS / 1000) - ageSeconds;
-            log.info("✅ Using cached data ({}s old, expires in {}s)", ageSeconds, expiresIn);
-            return cachedData;
+            long ttlSeconds = CACHE_TTL_MS / 1000;
+            
+            // Trigger background refresh if cache is old
+            if (System.currentTimeMillis() - lastCacheTime > REFRESH_THRESHOLD_MS) {
+                triggerBackgroundRefresh();
+            }
+            
+            log.info("✅ Returning cached data ({}s old, TTL: {}s)", ageSeconds, ttlSeconds);
+            return new HashMap<>(cachedData); // Return copy to avoid mutation issues
         }
 
-        log.warn("⏱️ Cache expired/empty. Fetching fresh data from ThingsBoard...");
+        // First request: fetch synchronously (shouldn't happen due to startup preload)
+        log.warn("⚠️ Cache empty on request, fetching synchronously...");
+        refreshCacheSync();
+        return cachedData != null ? new HashMap<>(cachedData) : new HashMap<>();
+    }
+
+    /**
+     * Scheduled background refresh - runs every 4 minutes.
+     * This keeps data fresh without blocking user requests.
+     */
+    @Scheduled(fixedRate = 4 * 60 * 1000) // Every 4 minutes
+    public void scheduledRefresh() {
+        log.info("⏰ Scheduled background refresh triggered");
+        refreshCacheAsync();
+    }
+
+    /**
+     * Trigger background refresh if not already refreshing.
+     */
+    private void triggerBackgroundRefresh() {
+        if (!isRefreshing.get()) {
+            refreshCacheAsync();
+        }
+    }
+
+    /**
+     * Refresh cache in background (async).
+     */
+    private void refreshCacheAsync() {
+        if (isRefreshing.getAndSet(true)) {
+            log.debug("⏳ Refresh already in progress, skipping...");
+            return;
+        }
+        
+        Thread backgroundThread = new Thread(() -> {
+            try {
+                refreshCacheSync();
+            } finally {
+                isRefreshing.set(false);
+            }
+        }, "DataService-BackgroundRefresh");
+        backgroundThread.start();
+    }
+
+    /**
+     * Synchronously refresh the cache from ThingsBoard.
+     */
+    private void refreshCacheSync() {
+        log.info("🔄 Refreshing device data from ThingsBoard...");
         long fetchStart = System.currentTimeMillis();
 
         Map<String, Object> freshData = new HashMap<>();
@@ -67,20 +148,12 @@ public class DataService {
             this.lastCacheTime = System.currentTimeMillis();
 
             long fetchTime = System.currentTimeMillis() - fetchStart;
-            log.info("✅ Fresh data cached! (Fetch took {}ms, {} keys, expires in 60s)",
-                    fetchTime, freshData.size());
+            log.info("✅ Cache refreshed! ({}ms, {} keys, valid for 5 min)", fetchTime, freshData.size());
 
         } catch (Exception e) {
-            log.error("❌ Error fetching device data: {}", e.getMessage());
-
-            // If we have stale cached data, return it rather than nothing
-            if (cachedData != null) {
-                log.warn("⚠️ Returning stale cached data due to fetch error");
-                return cachedData;
-            }
+            log.error("❌ Error refreshing cache: {}", e.getMessage());
+            // Keep old cache data on error
         }
-
-        return freshData;
     }
 
     /**
@@ -90,16 +163,5 @@ public class DataService {
         this.cachedData = null;
         this.lastCacheTime = 0;
         log.info("🗑️ Cache invalidated");
-    }
-
-    /**
-     * Check if cache is still within the 1-minute TTL.
-     */
-    private boolean isCacheValid() {
-        if (cachedData == null) {
-            return false;
-        }
-        long ageMs = System.currentTimeMillis() - lastCacheTime;
-        return ageMs < CACHE_TTL_MS;
     }
 }

@@ -343,11 +343,20 @@ public class ChatService {
         
         for (Map<String, Object> dev : allDevices) {
             String name = (String) dev.getOrDefault("device_name", "");
+            // Also check branchName and customerTitle for matching
+            String branchName = (String) dev.getOrDefault("branchName", "");
+            String customerTitle = (String) dev.getOrDefault("customerTitle", "");
+            
             if (!name.isEmpty()) {
                 String nameLower = name.toLowerCase();
                 String strippedName = nameLower.contains("-") ? nameLower.substring(nameLower.indexOf("-") + 1) : nameLower;
+                String branchLower = branchName.toLowerCase();
+                String customerLower = customerTitle.toLowerCase();
                 
-                if (qLower.contains(nameLower) || (strippedName.length() >= 3 && qLower.contains(strippedName))) {
+                // Match against device name, stripped name (after -), branch name, or customer title
+                if (qLower.contains(nameLower) || (strippedName.length() >= 3 && qLower.contains(strippedName))
+                    || (!branchLower.isEmpty() && qLower.contains(branchLower))
+                    || (!customerLower.isEmpty() && qLower.contains(customerLower))) {
                     matchedDevices.add(dev);
                 }
             }
@@ -369,7 +378,7 @@ public class ChatService {
         if (isGlobalQuery) {
             chatMemoryService.setActiveDevices(sessionId, new ArrayList<>()); // clear active zoom
             flat = flattenDeviceSummary(allDevices);
-            flat.put("SYSTEM_NOTE", "The user asked a general/overview question across all their devices. A lightweight summary of all devices is provided. Answer based on this summary. If their question requires detailed telemetry NOT present in this summary (like specific subsystem voltages or CPU stats), politely ask them to specify a precise device.");
+            flat.put("SYSTEM_NOTE", "The user asked a general/overview question across all their devices. A summary of all devices is provided. Answer based on this data. For questions about specific device details, please ask about a specific device name.");
         } 
         // 2. If matched specific devices, tightly bound how many we expand.
         else if (!matchedDevices.isEmpty()) {
@@ -379,15 +388,18 @@ public class ChatService {
             }
             chatMemoryService.setActiveDevices(sessionId, activeNames);
             
-            if (matchedDevices.size() <= 2) {
+            // ALWAYS use full data for specific device queries (1-5 matched)
+            // For larger sets, use summary to prevent token overflow
+            if (matchedDevices.size() <= 5) {
                 flat = flattenDeviceList(matchedDevices); // Safe to fully expand
             } else {
-                flat = flattenDeviceSummary(matchedDevices); // Too many to expand safely
-                flat.put("SYSTEM_NOTE", "Multiple devices matched the context (" + matchedDevices.size() + "). A lightweight summary of these devices is provided to save tokens. Answer based on this summary. If detailed telemetry is needed for a specific device, ask the user to specify just one.");
+                // Too many to expand safely - use summary
+                flat = flattenDeviceSummary(matchedDevices);
+                flat.put("SYSTEM_NOTE", "Multiple devices matched the context (" + matchedDevices.size() + "). A lightweight summary of these devices is provided to save tokens. If detailed telemetry is needed for a specific device, ask the user to specify just one.");
             }
         } 
-        // 3. If no match but less than 3 devices total, use all (small enough context).
-        else if (allDevices.size() <= 2) {
+        // 3. If no match but less than 6 devices total, use all (small enough context).
+        else if (allDevices.size() <= 5) {
             flat = flattenDeviceList(allDevices);
         } 
         // 4. Fallback: Check if we have active devices stored in the session memory
@@ -401,7 +413,7 @@ public class ChatService {
                     }
                 }
                 if (!sessionMatched.isEmpty()) {
-                    if (sessionMatched.size() <= 2) {
+                    if (sessionMatched.size() <= 5) {
                         flat = flattenDeviceList(sessionMatched);
                     } else {
                         flat = flattenDeviceSummary(sessionMatched);
@@ -470,6 +482,35 @@ public class ChatService {
             if (dev.containsKey("integratedStatus")) summary.put(name + ".integratedStatus", dev.get("integratedStatus"));
             if (dev.containsKey("accessControlStatus")) summary.put(name + ".accessControlStatus", dev.get("accessControlStatus"));
             if (dev.containsKey("timeLockHealth")) summary.put(name + ".timeLockHealth", dev.get("timeLockHealth"));
+            
+            // Uptime & Activity
+            if (dev.containsKey("uptimeTotal")) summary.put(name + ".uptimeTotal", dev.get("uptimeTotal"));
+            if (dev.containsKey("uptimeHeartbeat")) summary.put(name + ".uptimeHeartbeat", dev.get("uptimeHeartbeat"));
+            if (dev.containsKey("inactivityAlarmTime")) {
+                Object inactTime = dev.get("inactivityAlarmTime");
+                summary.put(name + ".inactivityAlarmTime", formatTimestamp(inactTime));
+            }
+            
+            // Hardware Stats
+            if (dev.containsKey("cpu")) summary.put(name + ".cpu", dev.get("cpu"));
+            if (dev.containsKey("memory")) summary.put(name + ".memory", dev.get("memory"));
+            if (dev.containsKey("disk")) summary.put(name + ".disk", dev.get("disk"));
+            if (dev.containsKey("temperature")) summary.put(name + ".temperature", dev.get("temperature"));
+            
+            // Power
+            if (dev.containsKey("ac_status")) summary.put(name + ".ac_status", dev.get("ac_status"));
+            if (dev.containsKey("POWER OFF")) summary.put(name + ".powerOff", dev.get("POWER OFF"));
+            if (dev.containsKey("SYSTEM ON")) summary.put(name + ".systemOn", dev.get("SYSTEM ON"));
+            if (dev.containsKey("MAINS ON")) summary.put(name + ".mainsOn", dev.get("MAINS ON"));
+            if (dev.containsKey("BATTERY LOW")) summary.put(name + ".batteryLow", dev.get("BATTERY LOW"));
+            
+            // Network
+            if (dev.containsKey("NETWORK")) summary.put(name + ".network", dev.get("NETWORK"));
+            
+            // Error counts
+            if (dev.containsKey("errorCount")) summary.put(name + ".errorCount", dev.get("errorCount"));
+            if (dev.containsKey("IASinactiveCOUNT")) summary.put(name + ".iasInactiveCount", dev.get("IASinactiveCOUNT"));
+            if (dev.containsKey("IASfaultCOUNT")) summary.put(name + ".iasFaultCount", dev.get("IASfaultCOUNT"));
             
             // Format timestamps to human-readable format
             if (dev.containsKey("lastActivityTime")) {

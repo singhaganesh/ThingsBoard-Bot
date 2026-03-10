@@ -61,6 +61,12 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Jakarta Annotations (for @PostConstruct, @Scheduled) -->
+		<dependency>
+			<groupId>jakarta.annotation</groupId>
+			<artifactId>jakarta.annotation-api</artifactId>
+		</dependency>
+
 		<!-- Lombok -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
