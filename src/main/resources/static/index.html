@@ -326,9 +326,14 @@
             padding: calc(var(--unit) * 1.5) calc(var(--unit) * 2);
             border-top: 1px solid var(--border-subtle);
             display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .chat-input-row {
+            display: flex;
             align-items: center;
             gap: calc(var(--unit) * 1);
-            flex-shrink: 0;
         }
 
         .chat-input-area input {
@@ -378,6 +383,16 @@
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
+        }
+
+        /* ========== AI Disclaimer ========== */
+        .ai-disclaimer {
+            padding: 4px 16px;
+            font-size: 10px;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            text-align: left;
+            border-top: 1px solid var(--border-subtle);
         }
 
         .send-btn svg {
@@ -529,14 +544,18 @@
             </div>
         </div>
 
+        
         <!-- Input -->
-        <div class="chat-input-area">
-            <input type="text" id="chat-input" placeholder="Ask about your device…" autocomplete="off" />
-            <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            </button>
+        <div class="chat-input-area" style="padding-top: 6px; padding-bottom: 6px;">
+            <p style="font-size: 10px; color: var(--text-secondary); opacity: 0.5; text-align: center; margin: 2px 0;">⚠️ AI can make mistakes — verify important info</p>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" placeholder="Ask about your device…" autocomplete="off" />
+                <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
         </div>
-
+        
         <div class="powered-by">Powered by <span>SEPLE IoT</span></div>
     </div>
 
@@ -715,3 +734,4 @@
     </script>
 </body>
 </html>
+
