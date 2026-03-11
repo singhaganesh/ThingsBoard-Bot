@@ -561,8 +561,8 @@
 
     <script>
         // ========== Configuration ==========
-        // Point to the Spring Boot backend port (default 8080)
-        const API_BASE = 'http://localhost:8080';
+        // Auto-detect API base URL from current host (works for both local and production)
+        const API_BASE = window.location.origin;
         const CHAT_ENDPOINT = `${API_BASE}/api/v1/chat/ask`;
 
         // ========== DOM Elements ==========
@@ -582,7 +582,6 @@
             isOpen = !isOpen;
             chatWindow.classList.toggle('open', isOpen);
             toggleBtn.classList.toggle('active', isOpen);
-            if (isOpen) onChatOpen();
 
             if (isOpen) {
                 chatInput.focus();
