@@ -1,179 +1,345 @@
-# ThingsBoard Bot
+# ThingsBoard Bot 🤖
 
-An AI-powered chatbot assistant for ThingsBoard IoT platforms. This bot connects to your ThingsBoard tenant, retrieves telemetry and attribute data from your devices, and uses OpenAI to provide insightful answers about your IoT devices.
+> **AI-Powered Chatbot for IoT Device Management**
 
-## Architecture Overview
+A intelligent chatbot that connects to your ThingsBoard IoT platform and uses OpenAI to answer questions about your devices in plain English. No technical knowledge required!
+
+---
+
+## 📖 Choose Your Guide
+
+- **👥 [For Non-Technical Users](#-for-non-technical-users)** - Simple explanation of what this does
+- **👨‍💻 [For Developers](#-for-developers)** - Technical setup and architecture details
+
+---
+
+# 👥 For Non-Technical Users
+
+## What Is This? 🤔
+
+Imagine you have many IoT devices (sensors, thermostats, cameras, etc.) spread across your facility. Instead of logging into a complicated dashboard, you can simply **ask questions in a chat window**:
+
+- "How many devices are offline right now?"
+- "What's the current temperature in Building A?"
+- "Which sensor has low battery?"
+- "What happened to Device X yesterday?"
+
+The chatbot will read data from all your devices and give you the answer **immediately**.
+
+## The Problem It Solves ✅
+
+| Before | After |
+|--------|-------|
+| Manually log into dashboard to check each device | Ask chatbot one question, get instant answer |
+| Hard to understand complex technical data | Chatbot explains in simple terms |
+| Finding device problems takes time | Chatbot alerts you to issues immediately |
+| Hard to track historical events | Chatbot remembers past events |
+
+## How It Works (Simple Version) 🔄
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         User/Browser                                 │
-│                   (Chat Widget: index.html)                         │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │ HTTP Requests
-┌──────────────────────────▼──────────────────────────────────────────┐
-│                      Spring Boot Backend                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │ ChatController│  │DataController│  │              │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
-│         │                 │                  │                      │
-│  ┌──────▼─────────────────▼──────────────────▼───────┐             │
-│  │              ChatService (Core Logic)              │             │
-│  │  1. Fetch device data (cached)                     │             │
-│  │  2. Filter context (reduce tokens)                  │             │
-│  │  3. Count tokens (validate)                         │             │
-│  │  4. Call OpenAI with prompt + context              │             │
-│  │  5. Return response                                │             │
-│  └───────────────────────┬─────────────────────────────┘             │
-└──────────────────────────┼────────────────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-┌───────▼───────┐  ┌──────▼───────┐  ┌──────▼───────┐
-│ ThingsBoard   │  │   OpenAI     │  │    MySQL     │
-│   Client      │  │   Client     │  │  Database    │
-│               │  │              │  │              │
-│ - Auth        │  │ - GPT calls  │  │ - Messages   │
-│ - Get devices │  │ - Token mgmt │  │ - Converstns │
-│ - Telemetry   │  │              │  │              │
-└───────────────┘  └──────────────┘  └──────────────┘
+You type a question in the chat box
+         ↓
+Chatbot reads all device data from ThingsBoard
+         ↓
+AI assistant (OpenAI) understands your question
+         ↓
+AI looks through device data for the answer
+         ↓
+Chatbot explains the answer in simple English
+         ↓
+You get your answer instantly!
 ```
 
-## How It Works
+## Key Features 🌟
 
-### 1. Chat Flow
-- User sends a question via the floating chat widget
-- [`ChatController`](src/main/java/com/seple/ThingsBoard_Bot/controller/ChatController.java) receives the request
-- [`ChatService`](src/main/java/com/seple/ThingsBoard_Bot/service/ChatService.java) orchestrates:
-  1. **Fetches device data** from ThingsBoard (cached for 60 seconds)
-  2. **Filters context** using [`ContextFilterUtil`](src/main/java/com/seple/ThingsBoard_Bot/util/ContextFilterUtil.java) to reduce tokens
-  3. **Counts tokens** to validate before OpenAI call
-  4. **Calls OpenAI** with system prompt + filtered context + user question
-  5. **Returns formatted response**
+✨ **Easy Chat Interface** - Just type your question, no training needed  
+📊 **Real-Time Data** - Always sees your latest device information  
+🧠 **Intelligent Answers** - Understands context and gives meaningful responses  
+💬 **Conversation History** - Remembers previous questions  
+🔒 **Secure** - Only shows data you have permission to see  
 
-### 2. Data Flow
-- [`ThingsBoardClient`](src/main/java/com/seple/ThingsBoard_Bot/client/ThingsBoardClient.java) handles ThingsBoard REST API
-- Supports both **Tenant Admin** (all devices) and **Customer/User** (scoped devices via `X-TB-Token`)
-- Device data includes: telemetry, CLIENT_SCOPE attributes, SERVER_SCOPE attributes, SHARED_SCOPE attributes
+## Setup for Users (Simple) 🚀
 
-## Features
+Your IT team will set this up for you. Once they do:
 
-- **Context-Aware Q&A:** Ask questions about your IoT devices, their status, health, and recent telemetry.
-- **Multi-Device Support:** Retrieve data across multiple devices within your tenant.
-- **Floating Chat Widget:** A sleek, "Acid Industrial" themed chat interface.
-- **Smart Data Filtering:** Aggressively filters raw JSON data to minimize OpenAI token usage.
-- **Caching:** 1-minute caching for device data to optimize performance.
-- **Multi-turn Conversations:** Maintains chat history for contextual responses.
+1. **Open this URL in your browser:** `http://localhost:8080` (your IT will give you the actual URL)
+2. **Look for the chat box** in the bottom-right corner
+3. **Type your question** and press Enter
+4. **Get your answer!** 💡
 
-## Tech Stack
+That's it! You don't need to know anything about databases, APIs, or code.
 
-- **Backend:** Java 21, Spring Boot 4.0.3
-- **Database:** MySQL
-- **APIs:** ThingsBoard REST API, OpenAI API
-- **Frontend:** HTML, CSS (Vanilla), JavaScript (Vanilla)
+---
 
-## Quick Setup
+# 👨‍💻 For Developers
 
-### 1. Prerequisites
-- Java 21+
-- Maven 3.8+
-- MySQL 8.0+
-- ThingsBoard account (self-hosted or cloud)
-- OpenAI API key
+## 📌 Project Overview
 
-### 2. Configure Application
+A **context-augmented generation (CAG) chatbot** built on Spring Boot that intelligently routes IoT device queries to live ThingsBoard telemetry or historical analysis. The system fetches real-time device data, filters it for token efficiency, and leverages OpenAI to provide context-aware answers.
+
+## 🎯 Purpose & Problem Statement
+
+| Aspect | Details |
+|--------|---------|
+| **Purpose** | Provide a natural language interface to IoT device data via ThingsBoard without requiring technical dashboard skills |
+| **Problem Solved** | Eliminates manual dashboard navigation; enables historical context retrieval; reduces token overhead through smart filtering |
+| **Use Case** | Facility managers, operations teams querying device status, anomalies, and trends |
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | Java 21, Spring Boot 4.0.3, Spring Data JPA, Spring Cache |
+| **Database** | MySQL 8.0+ (conversation history, entities) |
+| **APIs** | ThingsBoard REST API, OpenAI Chat API |
+| **Frontend** | HTML5, Vanilla CSS3, Vanilla JavaScript |
+| **Build** | Maven 3.8+, Java Compiler |
+
+## 🏗️ System Architecture (Brief)
+
+```
+┌─ Browser ─────────────┐
+│ Chat Widget UI        │
+└──────────┬────────────┘
+           │ HTTP
+┌──────────▼──────────────────────┐
+│ Spring Boot Backend             │
+│ ┌────────────────────────────┐  │
+│ │ ChatService (Orchestrator) │  │
+│ │ 1. Fetch device data       │  │
+│ │ 2. Filter context          │  │
+│ │ 3. Call OpenAI             │  │
+│ │ 4. Return response         │  │
+│ └────────────────────────────┘  │
+└──────────┬──────────┬──────────┬─┘
+           │          │          │
+     ┌─────▼─┐  ┌────▼───┐  ┌──▼──────┐
+     │Things │  │ OpenAI │  │ MySQL   │
+     │Board  │  │ API    │  │ DB      │
+     └───────┘  └────────┘  └─────────┘
+```
+
+## 📋 Features
+
+- ✅ Context-aware Q&A from live telemetry
+- ✅ Multi-device support with tenant/customer/user scopes
+- ✅ 60-second device data caching
+- ✅ Token counting & context filtering
+- ✅ Multi-turn conversation memory
+- ✅ Real-time vs. historical data routing
+- ✅ Floating chat widget (Acid Industrial theme)
+
+## 📦 Project Structure
+
+```
+src/main/java/com/seple/ThingsBoard_Bot/
+├── client/              # External API integrations
+│   ├── ThingsBoardClient.java
+│   ├── UserAwareThingsBoardClient.java
+│   └── OpenAIClient.java
+├── config/              # Spring beans & properties
+├── controller/          # REST endpoints
+├── service/             # Business logic
+│   ├── ChatService.java (core orchestrator)
+│   ├── DataService.java
+│   ├── ChatMemoryService.java
+│   └── ChartService.java
+├── util/                # Helpers
+│   ├── ContextFilterUtil.java
+│   └── TokenCounterService.java
+├── model/               # DTOs & Entities
+├── repository/          # JPA repositories
+└── exception/           # Custom exceptions
+```
+
+## ⚙️ Prerequisites
+
+- **Java 21+** (OpenJDK or Oracle JDK)
+- **Maven 3.8+**
+- **MySQL 8.0+** (running locally or remote)
+- **ThingsBoard account** (cloud or self-hosted)
+- **OpenAI API key** (paid or trial)
+- **Git** (for cloning)
+
+## 🚀 Setup & Run Locally
+
+### Step 1: Clone Repository
+```bash
+git clone https://github.com/your-org/ThingsBoard-Bot.git
+cd ThingsBoard-Bot
+```
+
+### Step 2: Create MySQL Database
+```bash
+mysql -u root -p
+```
+```sql
+CREATE DATABASE thingsboard_bot_db CHARACTER SET utf8mb4;
+CREATE USER 'tb_bot'@'localhost' IDENTIFIED BY 'secure_password';
+GRANT ALL PRIVILEGES ON thingsboard_bot_db.* TO 'tb_bot'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### Step 3: Configure Application
 Edit `src/main/resources/application.properties`:
 
 ```properties
+# Spring
+spring.application.name=ThingsBoard-Bot
+server.port=8080
+
 # Database
 spring.datasource.url=jdbc:mysql://localhost:3306/thingsboard_bot_db
-spring.datasource.username=your_db_user
-spring.datasource.password=your_db_password
+spring.datasource.username=tb_bot
+spring.datasource.password=secure_password
+spring.jpa.hibernate.ddl-auto=update
 
 # ThingsBoard
 iotchatbot.thingsboard.url=https://your-thingsboard-url.com
-iotchatbot.thingsboard.username=your_tb_username
+iotchatbot.thingsboard.username=admin@thingsboard.io
 iotchatbot.thingsboard.password=your_tb_password
 
 # OpenAI
-iotchatbot.openai.api-key=your_openai_api_key
+iotchatbot.openai.api-key=sk-your-api-key-here
+iotchatbot.openai.model=gpt-4
 ```
 
-### 3. Create Database
-```sql
-CREATE DATABASE thingsboard_bot_db;
-```
-
-### 4. Run the Application
+### Step 4: Build & Run
 ```bash
-# Using Maven
+# Clean build
+mvn clean install
+
+# Run with Maven
 mvn spring-boot:run
 
-# Or build and run
+# OR package & run JAR
 mvn clean package
 java -jar target/ThingsBoard-Bot-0.0.1-SNAPSHOT.jar
 ```
 
-### 5. Access the Application
-- Open `http://localhost:8080` in your browser
-- The chat widget appears in the bottom-right corner
+### Step 5: Access Application
+- **Open browser:** `http://localhost:8080`
+- **Chat widget:** Bottom-right corner
 
-## API Endpoints
+## 📡 API Documentation
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/chat/ask` | POST | Send a question to the chatbot |
-| `/api/v1/data/full` | GET | Get full device data (unfiltered) |
-| `/api/v1/data/all-devices` | GET | Get list of all devices |
+### Chat Endpoint
+```http
+POST /api/v1/chat/ask
+Content-Type: application/json
 
-### Authentication
-For user-scoped data, include the `X-TB-Token` header with a valid ThingsBoard customer/user token:
+{
+  "question": "How many devices are offline?",
+  "userId": "user123"
+}
+```
+
+**Response:**
+```json
+{
+  "response": "2 out of 10 devices are currently offline...",
+  "metadata": {
+    "tokensUsed": 342,
+    "executionTime": 1250
+  }
+}
+```
+
+### Data Endpoints
+```http
+GET /api/v1/data/all-devices
+GET /api/v1/data/full
+Header: X-TB-Token: your_customer_token (optional)
+```
+
+## 👥 User Flows
+
+### Flow 1: Basic Q&A
+```
+User → Question in chat → ChatService fetches live data → 
+OpenAI generates response → User sees answer
+```
+
+### Flow 2: Multi-Turn Conversation
+```
+Q1: "What's device X status?"
+→ [System stores in ChatMemoryService]
+Q2: "Show me its history"
+→ [System includes previous context]
+A2: "Yesterday it was..."
+```
+
+### Flow 3: User-Scoped Access
+```
+Customer provides X-TB-Token → 
+UserAwareThingsBoardClient filters data to customer scope →
+Only authorized device data shown
+```
+
+## ✅ Testing
+
+### Unit Test Locations
+```
+src/test/java/com/seple/ThingsBoard_Bot/
+├── service/ChatServiceTest.java
+├── util/TokenCounterServiceTest.java
+├── util/ContextFilterUtilTest.java
+└── client/OpenAIClientTest.java
+```
+
+### Run Tests
 ```bash
-curl -H "X-TB-Token: your_user_token" http://localhost:8080/api/v1/data/full
+# All tests
+mvn test
+
+# Specific test class
+mvn test -Dtest=ChatServiceTest
+
+# With coverage
+mvn test jacoco:report
 ```
 
-## Project Structure
+### Manual Testing (cURL)
+```bash
+# Test chat endpoint
+curl -X POST http://localhost:8080/api/v1/chat/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "List all devices", "userId": "test"}'
 
-```
-src/main/java/com/seple/ThingsBoard_Bot/
-├── ThingsBoardBotApplication.java    # Main entry point
-├── client/                           # External API clients
-│   ├── ThingsBoardClient.java        # ThingsBoard REST API
-│   ├── UserAwareThingsBoardClient.java # User-scoped TB API
-│   └── OpenAIClient.java             # OpenAI API
-├── config/                           # Spring configuration
-│   ├── ThingsBoardConfig.java        # ThingsBoard properties
-│   ├── OpenAIConfig.java             # OpenAI properties
-│   └── ChatbotConfig.java            # Chatbot settings
-├── controller/                       # REST controllers
-│   ├── ChatController.java           # /api/v1/chat
-│   └── DataController.java           # /api/v1/data
-├── service/                          # Business logic
-│   ├── ChatService.java              # Main chatbot logic
-│   ├── DataService.java              # Device data fetching
-│   ├── UserDataService.java          # User-scoped data
-│   └── ChatMemoryService.java        # Conversation history
-├── util/                             # Utilities
-│   ├── ContextFilterUtil.java        # Data filtering
-│   └── TokenCounterService.java      # Token counting
-├── model/                            # Data models
-│   ├── dto/                          # Data transfer objects
-│   └── entity/                       # JPA entities
-└── repository/                       # Database repositories
+# Test data endpoint
+curl http://localhost:8080/api/v1/data/all-devices
+
+# With authentication
+curl -H "X-TB-Token: your_token" http://localhost:8080/api/v1/data/full
 ```
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-### Check ThingsBoard Connection
-- Verify credentials in `application.properties`
-- Check ThingsBoard URL is accessible
-- Ensure user has permission to access devices
+| Issue | Solution |
+|-------|----------|
+| **Build fails** | `mvn clean install -U` (update dependencies) |
+| **ThingsBoard connection error** | Verify credentials, check URL accessibility |
+| **OpenAI API error** | Check API key validity, confirm billing, verify model name |
+| **Database connection refused** | Ensure MySQL running, verify credentials in properties |
+| **Chat widget not showing** | Clear browser cache, check `index.html` in `src/main/resources/static` |
 
-### Check OpenAI API
-- Verify API key is valid
-- Check API key has sufficient credits
-- Verify model name is correct
+## 📝 Environment Variables (Alternative to properties)
+```bash
+export TB_URL="https://your-thingsboard-url.com"
+export TB_USER="admin@thingsboard.io"
+export TB_PASS="password"
+export OPENAI_KEY="sk-..."
+export DB_URL="jdbc:mysql://localhost:3306/thingsboard_bot_db"
+export DB_USER="tb_bot"
+export DB_PASS="secure_password"
+```
 
-### Check Database
-- Ensure MySQL is running
-- Verify database credentials
-- Check database user has proper permissions
+---
+
+## 📞 Support
+
+For issues, check troubleshooting section or create an issue in the repository.
+
+**Last Updated:** 2026-03-11  
+**Version:** 0.0.1-SNAPSHOT
