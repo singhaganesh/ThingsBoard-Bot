@@ -105,14 +105,18 @@ public class ChatService {
             String sessionId = (userToken != null && !userToken.isBlank()) ? userToken : "default-session";
             List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history = chatMemoryService.getHistory(sessionId);
 
-            // Step 1: Get device data (from user cache or fallback to default cache)
+            // Step 1: Get device data — JWT is REQUIRED
             Map<String, Object> rawData;
-            if (userToken != null && !userToken.isBlank()) {
-                List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
-                rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history, sessionId);
-            } else {
-                rawData = dataService.getDeviceData();
+            if (userToken == null || userToken.isBlank()) {
+                return ChatResponse.builder()
+                        .answer("Please log in to ThingsBoard first. I need your authentication token to access your device data.")
+                        .error(true)
+                        .errorMessage("No JWT token provided. Please log in.")
+                        .timestamp(System.currentTimeMillis())
+                        .build();
             }
+            List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
+            rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history, sessionId);
             log.debug("Got {} raw data keys", rawData.size());
 
             // Step 2: Filter context to reduce tokens
@@ -564,6 +568,19 @@ public class ChatService {
         } catch (Exception e) {
             log.debug("Failed to format timestamp: {}", value, e);
             return value; // Return original on any error
+        }
+    }
+
+    /**
+     * Pre-fetch and cache user device data.
+     * Useful for hitting silently on login to eliminate the "cold start" delay.
+     */
+    public void initializeUserCache(String userToken) {
+        if (userToken != null && !userToken.isBlank()) {
+            log.info("⚡ Pre-fetching user device data for instant chat responses...");
+            userDataService.getUserDevicesData(userToken);
+        } else {
+            log.warn("Cannot initialize cache: No user token provided.");
         }
     }
 }

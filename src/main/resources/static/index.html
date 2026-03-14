@@ -400,42 +400,7 @@
             height: 18px;
         }
 
-        /* ========== Alert Indicator (Top Bar) ========== */
-        .alert-indicator {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: linear-gradient(90deg, #ff4444, #ff6b6b);
-            color: white;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 500;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            z-index: 10;
-            border-radius: 12px 12px 0 0;
-        }
 
-        .alert-indicator .pulse-dot {
-            width: 8px;
-            height: 8px;
-            background: white;
-            border-radius: 50%;
-            animation: pulse-dot 1.5s infinite;
-        }
-
-        @keyframes pulse-dot {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.3); opacity: 0.7; }
-        }
-
-        /* Hide old alert banner completely */
-        .alert-banner {
-            display: none !important;
-        }
 
         /* ========== Chat Window ========== */
         .chat-window {
@@ -450,27 +415,7 @@
             animation: fadeInUp 0.3s ease-out;
         }
 
-        .alert-banner.show {
-            display: flex;
-        }
 
-        .alert-banner .alert-icon {
-            flex-shrink: 0;
-        }
-
-        .alert-banner .alert-text {
-            flex: 1;
-            font-weight: 500;
-        }
-
-        .alert-banner .alert-dismiss {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 16px;
-            padding: 0 4px;
-        }
 
         /* ========== Powered By ========== */
         .powered-by {
@@ -564,6 +509,7 @@
         // Auto-detect API base URL from current host (works for both local and production)
         const API_BASE = window.location.origin;
         const CHAT_ENDPOINT = `${API_BASE}/api/v1/chat/ask`;
+        const INIT_ENDPOINT = `${API_BASE}/api/v1/chat/init`;
 
         // ========== DOM Elements ==========
         const toggleBtn = document.getElementById('chatbot-toggle');
@@ -571,8 +517,7 @@
         const chatMessages = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-btn');
-        const alertBanner = document.getElementById('alert-banner');
-        const alertText = document.getElementById('alert-text');
+
 
         let isOpen = false;
         let isLoading = false;
@@ -730,6 +675,21 @@
                 toggleBtn.classList.remove('active');
             }
         });
+        // ========== Initialization ==========
+        // Pre-fetch user device data in the background instantly on load
+        function initializeChatbotCache() {
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                console.log("Pre-fetching chatbot user data in background...");
+                fetch(INIT_ENDPOINT, {
+                    method: 'GET',
+                    headers: { 'X-TB-Token': token }
+                }).catch(err => console.debug("Silent init failed", err));
+            }
+        }
+
+        // Run on exact page load
+        initializeChatbotCache();
     </script>
 </body>
 </html>

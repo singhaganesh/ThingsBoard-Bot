@@ -2,6 +2,7 @@ package com.seple.ThingsBoard_Bot.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,6 +50,20 @@ public class ChatController {
 
         ChatResponse response = chatService.answerQuestion(request, userToken);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/v1/chat/init
+     * Non-blocking call to pre-fetch user devices data and cache it in the backend.
+     * Should be called quietly in the background right after login.
+     */
+    @GetMapping("/init")
+    public ResponseEntity<Void> initCache(@RequestHeader(value = "X-TB-Token", required = true) String userToken) {
+        log.info("Received cache init request (user token present)");
+        // Trigger initialization (this happens synchronously in the request thread currently, 
+        // but returns instantly to the frontend since the frontend doesn't rely on the response body)
+        chatService.initializeUserCache(userToken);
+        return ResponseEntity.ok().build();
     }
 }
 

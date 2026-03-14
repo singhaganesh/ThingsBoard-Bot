@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
+
 import org.springframework.stereotype.Service;
 
 import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
@@ -91,22 +91,7 @@ public class UserDataService {
         return freshData != null ? freshData : new ArrayList<>();
     }
 
-    /**
-     * Scheduled background refresh - runs every 4 minutes.
-     * Refreshes all cached user data in background.
-     */
-    @Scheduled(fixedRate = 4 * 60 * 1000)
-    public void scheduledUserCacheRefresh() {
-        log.info("⏰ Scheduled user cache refresh triggered");
-        for (String cacheKey : userCacheMap.keySet()) {
-            CachedUserData cached = userCacheMap.get(cacheKey);
-            if (cached != null && cached.shouldRefresh() && !cached.isRefreshing.get()) {
-                log.debug("🔄 Background refreshing user cache: {}", cacheKey);
-                // Note: We can't easily get the userToken back from hash, 
-                // so this is handled per-request for users
-            }
-        }
-    }
+
 
     /**
      * Refresh user cache asynchronously in background.

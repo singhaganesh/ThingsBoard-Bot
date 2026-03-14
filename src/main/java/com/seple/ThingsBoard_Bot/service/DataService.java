@@ -6,8 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import jakarta.annotation.PostConstruct;
-import org.springframework.scheduling.annotation.Scheduled;
+
 import org.springframework.stereotype.Service;
 
 import com.seple.ThingsBoard_Bot.client.ThingsBoardClient;
@@ -38,26 +37,10 @@ public class DataService {
 
     public DataService(ThingsBoardClient tbClient) {
         this.tbClient = tbClient;
-        // Pre-load cache on startup (async to not block app startup)
-        log.info("🚀 Initializing DataService with background refresh (5-min TTL)...");
-        initializeCacheAsync();
+        log.info("🚀 DataService initialized (on-demand only, no background fetch)");
     }
 
-    /**
-     * Initialize cache asynchronously to avoid blocking application startup.
-     */
-    @PostConstruct
-    public void initializeCacheAsync() {
-        Thread initThread = new Thread(() -> {
-            try {
-                refreshCacheSync();
-                log.info("✅ Initial cache loaded successfully");
-            } catch (Exception e) {
-                log.warn("⚠️ Initial cache load failed (will retry on first request): {}", e.getMessage());
-            }
-        }, "DataService-Init");
-        initThread.start();
-    }
+
 
     /**
      * Get device data. ALWAYS returns cached data instantly.
@@ -84,15 +67,7 @@ public class DataService {
         return cachedData != null ? new HashMap<>(cachedData) : new HashMap<>();
     }
 
-    /**
-     * Scheduled background refresh - runs every 4 minutes.
-     * This keeps data fresh without blocking user requests.
-     */
-    @Scheduled(fixedRate = 4 * 60 * 1000) // Every 4 minutes
-    public void scheduledRefresh() {
-        log.info("⏰ Scheduled background refresh triggered");
-        refreshCacheAsync();
-    }
+
 
     /**
      * Trigger background refresh if not already refreshing.
