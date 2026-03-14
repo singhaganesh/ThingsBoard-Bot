@@ -11,7 +11,7 @@ import lombok.Data;
 public class OpenAIConfig {
 
     private String apiKey;
-    private String model = "gpt-3.5-turbo";
+    private String model = "gpt-4o-mini";
     private int maxTokens = 1000;
     private double temperature = 0.2;
     private int timeout = 30000;

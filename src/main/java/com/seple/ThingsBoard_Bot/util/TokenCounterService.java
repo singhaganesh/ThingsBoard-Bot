@@ -13,10 +13,10 @@ import lombok.extern.slf4j.Slf4j;
 public class TokenCounterService {
 
     // Budget per message (system + user + context combined)
-    private static final int MAX_CONTEXT_TOKENS = 6000;
+    private static final int MAX_CONTEXT_TOKENS = 10000;
 
     // OpenAI model limit (gpt-3.5-turbo = 16,385 tokens total)
-    private static final int MODEL_TOKEN_LIMIT = 16385;
+    private static final int MODEL_TOKEN_LIMIT = 128000;
 
     /**
      * Estimate token count for a given text.
