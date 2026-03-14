@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
 
@@ -203,5 +204,16 @@ public class UserDataService {
      */
     private String getCacheKey(String userToken) {
         return String.valueOf(userToken.hashCode());
+    }
+
+    /**
+     * Clear all user cache daily at 1:00 AM IST to free up memory.
+     */
+    @Scheduled(cron = "0 0 1 * * ?", zone = "Asia/Kolkata")
+    public void dailyCacheMemoryWipe() {
+        log.info("🧹 [1:00 AM IST] Wiping all user device cache to free memory...");
+        int sizeBefore = userCacheMap.size();
+        userCacheMap.clear();
+        log.info("🧹 Cache wipe complete. Freed {} user sessions.", sizeBefore);
     }
 }
