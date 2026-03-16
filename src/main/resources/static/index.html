@@ -742,15 +742,16 @@
         // Configure trusted origins for security
         const TRUSTED_ORIGINS = [
             window.location.origin,  // Same origin
-            // Add your ThingsBoard domains here, e.g.:
-            // 'https://yourtenant.thingsboard.io',
-            // 'https://thingsboard.cloud'
+            'https://thingsboard.cloud',
+            'https://demo.thingsboard.io'
+            // Add your custom ThingsBoard domain here
         ];
         
         window.addEventListener('message', function(event) {
             // Verify origin for security
             if (event.origin && !TRUSTED_ORIGINS.includes(event.origin)) {
                 console.warn('Rejected message from untrusted origin:', event.origin);
+                console.log('To fix this, add "' + event.origin + '" to TRUSTED_ORIGINS in index.html');
                 return;
             }
             

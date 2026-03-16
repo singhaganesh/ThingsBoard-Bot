@@ -8,12 +8,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("Resource not found: {}", e.getMessage());
+        return buildErrorResponse(HttpStatus.NOT_FOUND, "Not Found", "The requested resource was not found.");
+    }
 
     @ExceptionHandler(ContextOverflowException.class)
     public ResponseEntity<Map<String, Object>> handleContextOverflow(ContextOverflowException e) {
