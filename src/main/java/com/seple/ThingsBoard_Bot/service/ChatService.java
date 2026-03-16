@@ -115,6 +115,11 @@ public class ChatService {
                         .timestamp(System.currentTimeMillis())
                         .build();
             }
+            // Debug: Show token in response only when debug logging is enabled
+            if (log.isDebugEnabled()) {
+                String tokenPreview = userToken.length() > 20 ? userToken.substring(0, 20) + "..." : userToken;
+                log.debug("Using JWT token: {}", tokenPreview);
+            }
             List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
             rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history, sessionId);
             log.debug("Got {} raw data keys", rawData.size());

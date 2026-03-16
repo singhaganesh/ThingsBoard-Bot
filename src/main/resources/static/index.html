@@ -81,7 +81,7 @@
             width: 400px;
             height: 560px;
             background: var(--bg-deep);
-            border: 1px solid var(--border-subtle);
+            border: none;
             border-radius: calc(var(--unit) * 2.5);
             z-index: 99998;
             display: flex;
@@ -91,7 +91,7 @@
             transform: translateY(20px) scale(0.95);
             pointer-events: none;
             transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(212, 243, 74, 0.05);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
 
         #chatbot-window.open {
@@ -676,6 +676,96 @@
             }
         });
         // ========== Initialization ==========
+        // Try multiple methods to get JWT token (for ThingsBoard embedding)
+        function getJwtToken() {
+            // Method 1: Check URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            let token = urlParams.get('token') || urlParams.get('jwt_token');
+            if (token) {
+                localStorage.setItem('jwt_token', token);
+                console.log("JWT token found in URL and saved to localStorage");
+                return token;
+            }
+            
+            // Method 2: Try to get from ThingsBoard widget context (if embedded in ThingsBoard)
+            if (window.TB && window.TB.Widget) {
+                try {
+                    const widgetContext = window.TB.Widget.getWidgetContext();
+                    if (widgetContext && widgetContext.getJwtToken) {
+                        token = widgetContext.getJwtToken();
+                        if (token) {
+                            localStorage.setItem('jwt_token', token);
+                            console.log("JWT token found via ThingsBoard Widget API");
+                            return token;
+                        }
+                    }
+                } catch(e) {
+                    console.debug("ThingsBoard widget API not available", e);
+                }
+            }
+            
+            // Method 3: Check if running inside ThingsBoard iframe (try parent window)
+            try {
+                if (window.parent !== window) {
+                    // Verify parent window is same origin before accessing
+                    let canAccessParent = false;
+                    try {
+                        canAccessParent = (window.location.origin === window.parent.location.origin);
+                    } catch(e) {
+                        // Cross-origin - cannot access parent window
+                        console.debug('Cross-origin parent window detected');
+                    }
+                    
+                    if (canAccessParent) {
+                        const tbToken = window.parent.localStorage.getItem('tb_token') || 
+                                       window.parent.localStorage.getItem('jwt_token');
+                        if (tbToken) {
+                            localStorage.setItem('jwt_token', tbToken);
+                            console.log("JWT token found from ThingsBoard localStorage");
+                            return tbToken;
+                        }
+                    }
+                }
+            } catch(e) {
+                console.debug("Cannot access parent window", e);
+            }
+            
+            // Method 4: Check localStorage directly
+            token = localStorage.getItem('jwt_token') || localStorage.getItem('tb_token');
+            return token;
+        }
+        
+        // Initialize token on load
+        const jwtToken = getJwtToken();
+        
+        // ========== Listen for postMessage from ThingsBoard ==========
+        // Configure trusted origins for security
+        const TRUSTED_ORIGINS = [
+            window.location.origin,  // Same origin
+            // Add your ThingsBoard domains here, e.g.:
+            // 'https://yourtenant.thingsboard.io',
+            // 'https://thingsboard.cloud'
+        ];
+        
+        window.addEventListener('message', function(event) {
+            // Verify origin for security
+            if (event.origin && !TRUSTED_ORIGINS.includes(event.origin)) {
+                console.warn('Rejected message from untrusted origin:', event.origin);
+                return;
+            }
+            
+            if (event.data && event.data.type === 'TB_AUTH_TOKEN') {
+                const token = event.data.token;
+                if (token) {
+                    localStorage.setItem('jwt_token', token);
+                    console.log('JWT token received from ThingsBoard via postMessage');
+                    
+                    // Notify backend about new token
+                    initializeChatbotCache();
+                }
+            }
+        });
+        
         // Pre-fetch user device data in the background instantly on load
         function initializeChatbotCache() {
             const token = localStorage.getItem('jwt_token');

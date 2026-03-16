@@ -182,6 +182,14 @@ public class UserAwareThingsBoardClient {
     }
 
     private List<Map<String, String>> fallbackTenantDevices(String userToken) {
+        // First, try customer devices API (for customer users)
+        List<Map<String, String>> customerDevices = getCustomerDevices(userToken);
+        if (!customerDevices.isEmpty()) {
+            log.info("✅ Fetched {} devices via customer API", customerDevices.size());
+            return customerDevices;
+        }
+        
+        // Fallback to tenant devices (for tenant admin users)
         String url = config.getUrl() + "/api/tenant/devices?pageSize=1000&page=0";
         List<Map<String, String>> devices = new ArrayList<>();
         try {
@@ -209,6 +217,41 @@ public class UserAwareThingsBoardClient {
             }
         } catch (Exception e) {
             log.error("❌ Fallback tenant devices failed: {}", e.getMessage());
+        }
+        return devices;
+    }
+    
+    /**
+     * Get devices for customer users using /api/customer/devices
+     */
+    private List<Map<String, String>> getCustomerDevices(String userToken) {
+        String url = config.getUrl() + "/api/customer/devices?pageSize=1000&page=0";
+        List<Map<String, String>> devices = new ArrayList<>();
+        try {
+            HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode json = objectMapper.readTree(response.getBody());
+                JsonNode dataArray = json.get("data");
+                if (dataArray != null && dataArray.isArray()) {
+                    for (JsonNode deviceNode : dataArray) {
+                        Map<String, String> deviceMap = new HashMap<>();
+                        if (deviceNode.has("id")) {
+                            deviceMap.put("id", deviceNode.get("id").get("id").asText());
+                        }
+                        if (deviceNode.has("name")) {
+                            deviceMap.put("name", deviceNode.get("name").asText());
+                        }
+                        if (deviceNode.has("type")) {
+                            deviceMap.put("type", deviceNode.get("type").asText());
+                        }
+                        devices.add(deviceMap);
+                    }
+                }
+                log.info("✅ Fetched {} devices via customer API", devices.size());
+            }
+        } catch (Exception e) {
+            log.debug("Customer devices API not available: {}", e.getMessage());
         }
         return devices;
     }
