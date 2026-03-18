@@ -466,7 +466,7 @@
                 </svg>
             </div>
             <div class="chat-header-info">
-                <div class="chat-header-title">IoT Assistant</div>
+                <div class="chat-header-title">SAI</div>
                 <div class="chat-header-status">
                     <div class="dot"></div>
                     Online — Ready to help
@@ -479,7 +479,7 @@
             <div class="welcome-msg">
                 <div class="emoji">🤖</div>
                 <h3>Hey! I'm your IoT Assistant</h3>
-                <p>Ask me anything about your devices — status, battery health, alarms, or trends.</p>
+                <p>Ask me anything about your devices — status, battery health, or alarms.</p>
                 <div class="quick-actions">
                     <button class="quick-btn" onclick="sendQuickQ('What devices do I have?')">📱 My Devices</button>
                     <button class="quick-btn" onclick="sendQuickQ('Are there any low battery devices?')">🔋 Low Battery?</button>
@@ -501,7 +501,7 @@
             </div>
         </div>
         
-        <div class="powered-by">Powered by <span>SEPLE IoT</span></div>
+        <div class="powered-by">Powered by <span>SEPLE</span></div>
     </div>
 
     <script>
@@ -678,12 +678,12 @@
         // ========== Initialization ==========
         // Try multiple methods to get JWT token (for ThingsBoard embedding)
         function getJwtToken() {
-            // Method 1: Check URL parameter
+            // Method 1: Check URL parameter (most reliable for cross-origin embedding)
             const urlParams = new URLSearchParams(window.location.search);
-            let token = urlParams.get('token') || urlParams.get('jwt_token');
+            let token = urlParams.get('token') || urlParams.get('jwt_token') || urlParams.get('tb_token') || urlParams.get('access_token');
             if (token) {
                 localStorage.setItem('jwt_token', token);
-                console.log("JWT token found in URL and saved to localStorage");
+                console.log("✅ JWT token found in URL and saved to localStorage");
                 return token;
             }
             
@@ -730,9 +730,23 @@
                 console.debug("Cannot access parent window", e);
             }
             
-            // Method 4: Check localStorage directly
-            token = localStorage.getItem('jwt_token') || localStorage.getItem('tb_token');
-            return token;
+            // Method 4: Check localStorage directly with common token keys
+            const commonTokenKeys = [
+                'jwt_token',
+                'tb_token',
+                'token',
+                'access_token',
+                'authToken',
+                'thingsboard_token'
+            ];
+            for (const key of commonTokenKeys) {
+                token = localStorage.getItem(key);
+                if (token) {
+                    console.log("JWT token found from localStorage key: " + key);
+                    return token;
+                }
+            }
+            return null;
         }
         
         // Initialize token on load
@@ -743,28 +757,42 @@
         const TRUSTED_ORIGINS = [
             window.location.origin,  // Same origin
             'https://thingsboard.cloud',
-            'https://demo.thingsboard.io'
-            // Add your custom ThingsBoard domain here
+            'https://demo.thingsboard.io',
+            'https://www.dexterhms.com',
+            'https://dexterhms.com',
+            'https://d2pz6ywsj012xd.cloudfront.net'
         ];
         
         window.addEventListener('message', function(event) {
-            // Verify origin for security
+            // Verify origin for security - allow if origin is null (for about:blank, file://, etc.)
+            // but still validate if origin is provided
             if (event.origin && !TRUSTED_ORIGINS.includes(event.origin)) {
                 console.warn('Rejected message from untrusted origin:', event.origin);
                 console.log('To fix this, add "' + event.origin + '" to TRUSTED_ORIGINS in index.html');
                 return;
             }
             
+            // Allow messages without origin (e.g., from about:blank iframes) but log for debugging
+            if (!event.origin) {
+                console.debug('Received postMessage without origin - allowing for iframe compatibility');
+            }
+            
             if (event.data && event.data.type === 'TB_AUTH_TOKEN') {
                 const token = event.data.token;
                 if (token) {
                     localStorage.setItem('jwt_token', token);
-                    console.log('JWT token received from ThingsBoard via postMessage');
+                    console.log('✅ JWT token received via postMessage!');
+                    console.log('Token preview:', token.substring(0, 30) + '...');
                     
                     // Notify backend about new token
                     initializeChatbotCache();
+                } else {
+                    console.warn('⚠️ TB_AUTH_TOKEN received but token is empty');
                 }
             }
+            
+            // Debug: Log all received messages
+            console.log('📨 Received postMessage:', event.data);
         });
         
         // Pre-fetch user device data in the background instantly on load
