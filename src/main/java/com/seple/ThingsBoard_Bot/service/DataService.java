@@ -70,6 +70,34 @@ public class DataService {
 
 
     /**
+     * Get data for a specific device by its ID.
+     * Fetches fresh data from ThingsBoard.
+     */
+    public Map<String, Object> getDeviceDataById(String deviceId) {
+        log.info("🔄 Fetching data for device {} from ThingsBoard...", deviceId);
+        Map<String, Object> deviceData = new HashMap<>();
+
+        try {
+            // Basic info would ideally come from a device list, but for now we fetch telemetry/attributes
+            deviceData.put("device_id", deviceId);
+            
+            // Fetch from all attribute scopes
+            deviceData.putAll(tbClient.getAttributes("CLIENT_SCOPE", deviceId));
+            deviceData.putAll(tbClient.getAttributes("SERVER_SCOPE", deviceId));
+            deviceData.putAll(tbClient.getAttributes("SHARED_SCOPE", deviceId));
+
+            // Fetch latest telemetry
+            deviceData.putAll(tbClient.getTelemetry(deviceId));
+
+            log.info("✅ Fetched data for device {}", deviceId);
+        } catch (Exception e) {
+            log.error("❌ Error fetching data for device {}: {}", deviceId, e.getMessage());
+        }
+
+        return deviceData;
+    }
+
+    /**
      * Trigger background refresh if not already refreshing.
      */
     private void triggerBackgroundRefresh() {

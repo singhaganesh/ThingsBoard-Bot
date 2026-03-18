@@ -130,12 +130,20 @@ public class ThingsBoardClient {
         return getTelemetry(config.getDeviceId());
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> getTelemetry(String deviceId) {
+        return getTelemetry(deviceId, config.getAllowedKeys());
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getTelemetry(String deviceId, String keys) {
         String url = config.getUrl()
                 + "/api/plugins/telemetry/DEVICE/"
                 + deviceId
                 + "/values/timeseries";
+        
+        if (keys != null && !keys.isBlank()) {
+            url += "?keys=" + keys;
+        }
 
         log.debug("Fetching telemetry from: {}", url);
         Map<String, Object> result = new HashMap<>();
@@ -149,15 +157,20 @@ public class ThingsBoardClient {
                 json.fields().forEachRemaining(entry -> {
                     JsonNode valueArray = entry.getValue();
                     if (valueArray.isArray() && !valueArray.isEmpty()) {
-                        result.put(entry.getKey(), valueArray.get(0).get("value").asText());
+                        JsonNode valueNode = valueArray.get(0).get("value");
+                        if (valueNode != null && !valueNode.isNull()) {
+                            String value = valueNode.asText();
+                            result.put(entry.getKey(), value);
+                            log.info("📡 [Telemetry] {} = {}", entry.getKey(), value);
+                        }
                     }
                 });
-                log.debug("✅ Fetched {} telemetry keys", result.size());
+                log.info("✅ Fetched {} valid telemetry keys", result.size());
             }
         } catch (RestClientException e) {
             log.error("❌ Failed to fetch telemetry: {}", e.getMessage());
             // Retry once with fresh token
-            retryWithFreshToken(() -> fetchTelemetryInto(deviceId, result));
+            retryWithFreshToken(() -> fetchTelemetryInto(deviceId, keys, result));
         } catch (Exception e) {
             log.error("❌ Error parsing telemetry: {}", e.getMessage());
         }
@@ -165,12 +178,16 @@ public class ThingsBoardClient {
         return result;
     }
 
-    private void fetchTelemetryInto(String deviceId, Map<String, Object> result) {
+    private void fetchTelemetryInto(String deviceId, String keys, Map<String, Object> result) {
         try {
             String url = config.getUrl()
                     + "/api/plugins/telemetry/DEVICE/"
                     + deviceId
                     + "/values/timeseries";
+
+            if (keys != null && !keys.isBlank()) {
+                url += "?keys=" + keys;
+            }
 
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
@@ -196,10 +213,18 @@ public class ThingsBoardClient {
     }
 
     public Map<String, Object> getAttributes(String scope, String deviceId) {
+        return getAttributes(scope, deviceId, config.getAllowedKeys());
+    }
+
+    public Map<String, Object> getAttributes(String scope, String deviceId, String keys) {
         String url = config.getUrl()
                 + "/api/plugins/telemetry/DEVICE/"
                 + deviceId
                 + "/values/attributes/" + scope;
+
+        if (keys != null && !keys.isBlank()) {
+            url += "?keys=" + keys;
+        }
 
         log.debug("Fetching {} attributes from: {}", scope, url);
         Map<String, Object> result = new HashMap<>();
@@ -214,10 +239,12 @@ public class ThingsBoardClient {
                     for (JsonNode attr : jsonArray) {
                         String key = attr.get("key").asText();
                         JsonNode valueNode = attr.get("value");
-                        result.put(key, valueNode.isTextual() ? valueNode.asText() : valueNode.toString());
+                        String value = valueNode.isTextual() ? valueNode.asText() : valueNode.toString();
+                        result.put(key, value);
+                        log.info("🏷️ [Attribute - {}] {} = {}", scope, key, value);
                     }
                 }
-                log.debug("✅ Fetched {} {} attributes", result.size(), scope);
+                log.info("✅ Fetched {} {} attributes", result.size(), scope);
             }
         } catch (RestClientException e) {
             log.error("❌ Failed to fetch {} attributes: {}", scope, e.getMessage());

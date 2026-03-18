@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -57,6 +58,38 @@ public class DataController {
         
         log.info("Returning full device data ({} keys)", fullData.size());
         return ResponseEntity.ok(fullData);
+    }
+
+    /**
+     * Endpoint to retrieve full information for a SINGLE device by its ID.
+     * Searches user cache if X-TB-Token is present, otherwise uses global cache/fetch.
+     *
+     * @param deviceId The ThingsBoard device ID.
+     * @param userToken Optional user JWT token for scoped access.
+     * @return 200 OK with device data, or 404 if not found.
+     */
+    @GetMapping("/device/{deviceId}")
+    public ResponseEntity<Map<String, Object>> getDeviceDataById(
+            @PathVariable String deviceId,
+            @RequestHeader(value = "X-TB-Token", required = false) String userToken) {
+        log.info("API Request: GET /api/v1/data/device/{} (user token: {})", 
+                deviceId, userToken != null ? "present" : "absent");
+        
+        Map<String, Object> deviceData;
+        
+        if (userToken != null && !userToken.isBlank()) {
+            deviceData = userDataService.getUserDeviceDataById(userToken, deviceId);
+        } else {
+            deviceData = dataService.getDeviceDataById(deviceId);
+        }
+        
+        if (deviceData.isEmpty() || !deviceData.containsKey("device_id")) {
+            log.warn("Device {} not found", deviceId);
+            return ResponseEntity.notFound().build();
+        }
+        
+        log.info("Returning data for device {}", deviceId);
+        return ResponseEntity.ok(deviceData);
     }
 
     /**

@@ -17,6 +17,7 @@ public class ThingsBoardConfig {
     private String username;
     private String password;
     private String deviceId;
+    private String allowedKeys;
     private int timeout = 30000;
     private int cacheTtlSeconds = 60;
 

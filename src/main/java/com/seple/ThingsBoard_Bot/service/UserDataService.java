@@ -159,6 +159,24 @@ public class UserDataService {
     }
 
     /**
+     * Get data for a specific device by its ID for the logged-in user.
+     * Searches the user's cached devices first.
+     */
+    public Map<String, Object> getUserDeviceDataById(String userToken, String deviceId) {
+        List<Map<String, Object>> allDevices = getUserDevicesData(userToken);
+        
+        for (Map<String, Object> device : allDevices) {
+            if (deviceId.equals(device.get("device_id"))) {
+                log.info("✅ Found device {} in user cache", deviceId);
+                return new HashMap<>(device);
+            }
+        }
+        
+        log.warn("⚠️ Device {} not found in user cache", deviceId);
+        return new HashMap<>();
+    }
+
+    /**
      * Get a flattened map of all user device data, suitable for the ChatService context.
      */
     public Map<String, Object> getUserDevicesDataFlat(String userToken) {

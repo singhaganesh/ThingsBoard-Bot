@@ -262,10 +262,21 @@ public class UserAwareThingsBoardClient {
      * Fetch latest telemetry for a specific device using the user's token.
      */
     public Map<String, Object> getTelemetry(String userToken, String deviceId) {
+        return getTelemetry(userToken, deviceId, config.getAllowedKeys());
+    }
+
+    /**
+     * Fetch latest telemetry for a specific device using the user's token and specific keys.
+     */
+    public Map<String, Object> getTelemetry(String userToken, String deviceId, String keys) {
         String url = config.getUrl()
                 + "/api/plugins/telemetry/DEVICE/"
                 + deviceId
                 + "/values/timeseries";
+        
+        if (keys != null && !keys.isBlank()) {
+            url += "?keys=" + keys;
+        }
 
         log.debug("Fetching telemetry for device {} with user token", deviceId);
         Map<String, Object> result = new HashMap<>();
@@ -279,10 +290,15 @@ public class UserAwareThingsBoardClient {
                 json.fields().forEachRemaining(entry -> {
                     JsonNode valueArray = entry.getValue();
                     if (valueArray.isArray() && !valueArray.isEmpty()) {
-                        result.put(entry.getKey(), valueArray.get(0).get("value").asText());
+                        JsonNode valueNode = valueArray.get(0).get("value");
+                        if (valueNode != null && !valueNode.isNull()) {
+                            String value = valueNode.asText();
+                            result.put(entry.getKey(), value);
+                            log.info("📡 [User Telemetry] {} = {}", entry.getKey(), value);
+                        }
                     }
                 });
-                log.debug("✅ Fetched {} telemetry keys for device {}", result.size(), deviceId);
+                log.info("✅ Fetched {} valid telemetry keys for device {}", result.size(), deviceId);
             }
         } catch (Exception e) {
             log.error("❌ Failed to fetch telemetry for device {}: {}", deviceId, e.getMessage());
@@ -297,10 +313,21 @@ public class UserAwareThingsBoardClient {
      * Fetch attributes for a specific device and scope using the user's token.
      */
     public Map<String, Object> getAttributes(String userToken, String scope, String deviceId) {
+        return getAttributes(userToken, scope, deviceId, config.getAllowedKeys());
+    }
+
+    /**
+     * Fetch attributes for a specific device and scope using the user's token and specific keys.
+     */
+    public Map<String, Object> getAttributes(String userToken, String scope, String deviceId, String keys) {
         String url = config.getUrl()
                 + "/api/plugins/telemetry/DEVICE/"
                 + deviceId
                 + "/values/attributes/" + scope;
+        
+        if (keys != null && !keys.isBlank()) {
+            url += "?keys=" + keys;
+        }
 
         log.debug("Fetching {} attributes for device {} with user token", scope, deviceId);
         Map<String, Object> result = new HashMap<>();
@@ -315,10 +342,12 @@ public class UserAwareThingsBoardClient {
                     for (JsonNode attr : jsonArray) {
                         String key = attr.get("key").asText();
                         JsonNode valueNode = attr.get("value");
-                        result.put(key, valueNode.isTextual() ? valueNode.asText() : valueNode.toString());
+                        String value = valueNode.isTextual() ? valueNode.asText() : valueNode.toString();
+                        result.put(key, value);
+                        log.info("🏷️ [User Attribute - {}] {} = {}", scope, key, value);
                     }
                 }
-                log.debug("✅ Fetched {} {} attributes for device {}", result.size(), scope, deviceId);
+                log.info("✅ Fetched {} {} attributes for device {}", result.size(), scope, deviceId);
             }
         } catch (Exception e) {
             log.error("❌ Failed to fetch {} attributes for device {}: {}", scope, deviceId, e.getMessage());
