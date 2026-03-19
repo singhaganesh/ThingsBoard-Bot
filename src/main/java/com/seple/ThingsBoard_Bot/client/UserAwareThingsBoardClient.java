@@ -23,10 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * A ThingsBoard API client that uses the LOGGED-IN USER's JWT token
  * instead of the tenant-admin token.
- * <p>
- * This ensures that API calls are scoped to only the devices
- * that the user has access to (ThingsBoard enforces this server-side).
- * </p>
  */
 @Slf4j
 @Component
@@ -45,9 +41,6 @@ public class UserAwareThingsBoardClient {
 
     // ==================== Auth Headers ====================
 
-    /**
-     * Build HTTP headers using the USER's JWT token (not tenant-admin).
-     */
     private HttpHeaders getHeaders(String userToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Authorization", "Bearer " + userToken);
@@ -57,28 +50,17 @@ public class UserAwareThingsBoardClient {
 
     // ==================== User Info ====================
 
-    /**
-     * Extract the user's customerId from the ThingsBoard /api/auth/user endpoint.
-     * This is needed to fetch customer-scoped devices.
-     */
     public String getCustomerId(String userToken) {
         String url = config.getUrl() + "/api/auth/user";
-        log.debug("Fetching user info from: {}", url);
-
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 JsonNode customerIdNode = json.get("customerId");
                 if (customerIdNode != null && customerIdNode.has("id")) {
-                    String customerId = customerIdNode.get("id").asText();
-                    log.info("✅ Resolved customerId: {}", customerId);
-                    return customerId;
+                    return customerIdNode.get("id").asText();
                 }
-                // If user is a tenant admin, they won't have a customerId
-                log.warn("⚠️ User has no customerId — may be a tenant admin");
             }
         } catch (Exception e) {
             log.error("❌ Error fetching user info: {}", e.getMessage());
@@ -86,33 +68,23 @@ public class UserAwareThingsBoardClient {
         return null;
     }
 
-    /**
-     * Get devices assigned to the user.
-     * Uses the universal /api/entitiesQuery/find endpoint which properly resolves
-     * RBAC permissions, Entity Groups (PE), and Customer associations (CE).
-     */
     public List<Map<String, String>> getUserDevices(String userToken) {
         String url = config.getUrl() + "/api/entitiesQuery/find";
         log.info("Fetching devices for user using entitiesQuery...");
         List<Map<String, String>> devices = new ArrayList<>();
 
         try {
-            // Build the complex Entity Data Query payload
             Map<String, Object> payload = new HashMap<>();
-            
-            // 1. Entity Filter
             Map<String, String> entityFilter = new HashMap<>();
             entityFilter.put("type", "entityType");
             entityFilter.put("entityType", "DEVICE");
             payload.put("entityFilter", entityFilter);
 
-            // 2. Page Link
             Map<String, Object> pageLink = new HashMap<>();
             pageLink.put("pageSize", 1000);
             pageLink.put("page", 0);
             payload.put("pageLink", pageLink);
 
-            // 3. Entity Fields to return
             List<Map<String, String>> entityFields = new ArrayList<>();
             Map<String, String> nameField = new HashMap<>();
             nameField.put("type", "ENTITY_FIELD");
@@ -135,61 +107,32 @@ public class UserAwareThingsBoardClient {
                 if (dataArray != null && dataArray.isArray()) {
                     for (JsonNode deviceNode : dataArray) {
                         Map<String, String> deviceMap = new HashMap<>();
-                        // Extract ID: ThingsBoard might return {"entityId": {"id": "..."}} OR {"id": {"id": "..."}} OR just {"id": "uuid..."}
-                        JsonNode idNode = null;
-                        if (deviceNode.has("entityId")) {
-                            idNode = deviceNode.get("entityId");
-                        } else if (deviceNode.has("id")) {
-                            idNode = deviceNode.get("id");
-                        }
-
+                        JsonNode idNode = deviceNode.has("entityId") ? deviceNode.get("entityId") : deviceNode.get("id");
                         if (idNode != null) {
-                            if (idNode.has("id")) {
-                                deviceMap.put("id", idNode.get("id").asText());
-                            } else if (idNode.isTextual()) {
-                                deviceMap.put("id", idNode.asText());
-                            }
+                            deviceMap.put("id", idNode.has("id") ? idNode.get("id").asText() : idNode.asText());
                         }
-                        
-                        // Fields returned might be arrays in latest -> ENTITY_FIELD
                         if (deviceNode.has("latest") && deviceNode.get("latest").has("ENTITY_FIELD")) {
                             JsonNode fields = deviceNode.get("latest").get("ENTITY_FIELD");
-                            if (fields.has("name")) {
-                                deviceMap.put("name", fields.get("name").get("value").asText());
-                            }
-                            if (fields.has("type")) {
-                                deviceMap.put("type", fields.get("type").get("value").asText());
-                            }
+                            if (fields.has("name")) deviceMap.put("name", fields.get("name").get("value").asText());
+                            if (fields.has("type")) deviceMap.put("type", fields.get("type").get("value").asText());
                         }
                         devices.add(deviceMap);
                     }
                 }
                 log.info("✅ Fetched {} devices via entitiesQuery", devices.size());
-                
-                // Fallback for Tenant Admin or different setups
-                if (devices.isEmpty()) {
-                    log.warn("entitiesQuery returned 0 devices. Trying fallback to /api/tenant/devices...");
-                    return fallbackTenantDevices(userToken);
-                }
+                if (devices.isEmpty()) return fallbackTenantDevices(userToken);
             }
         } catch (Exception e) {
             log.error("❌ Error fetching user devices via entitiesQuery: {}", e.getMessage());
-            // Last resort fallback
             return fallbackTenantDevices(userToken);
         }
-
         return devices;
     }
 
     private List<Map<String, String>> fallbackTenantDevices(String userToken) {
-        // First, try customer devices API (for customer users)
         List<Map<String, String>> customerDevices = getCustomerDevices(userToken);
-        if (!customerDevices.isEmpty()) {
-            log.info("✅ Fetched {} devices via customer API", customerDevices.size());
-            return customerDevices;
-        }
-        
-        // Fallback to tenant devices (for tenant admin users)
+        if (!customerDevices.isEmpty()) return customerDevices;
+
         String url = config.getUrl() + "/api/tenant/devices?pageSize=1000&page=0";
         List<Map<String, String>> devices = new ArrayList<>();
         try {
@@ -201,29 +144,19 @@ public class UserAwareThingsBoardClient {
                 if (dataArray != null && dataArray.isArray()) {
                     for (JsonNode deviceNode : dataArray) {
                         Map<String, String> deviceMap = new HashMap<>();
-                        if (deviceNode.has("id")) {
-                            deviceMap.put("id", deviceNode.get("id").get("id").asText());
-                        }
-                        if (deviceNode.has("name")) {
-                            deviceMap.put("name", deviceNode.get("name").asText());
-                        }
-                        if (deviceNode.has("type")) {
-                            deviceMap.put("type", deviceNode.get("type").asText());
-                        }
+                        if (deviceNode.has("id")) deviceMap.put("id", deviceNode.get("id").get("id").asText());
+                        if (deviceNode.has("name")) deviceMap.put("name", deviceNode.get("name").asText());
+                        if (deviceNode.has("type")) deviceMap.put("type", deviceNode.get("type").asText());
                         devices.add(deviceMap);
                     }
                 }
-                log.info("✅ Fetched {} devices via tenant fallback", devices.size());
             }
         } catch (Exception e) {
             log.error("❌ Fallback tenant devices failed: {}", e.getMessage());
         }
         return devices;
     }
-    
-    /**
-     * Get devices for customer users using /api/customer/devices
-     */
+
     private List<Map<String, String>> getCustomerDevices(String userToken) {
         String url = config.getUrl() + "/api/customer/devices?pageSize=1000&page=0";
         List<Map<String, String>> devices = new ArrayList<>();
@@ -236,49 +169,24 @@ public class UserAwareThingsBoardClient {
                 if (dataArray != null && dataArray.isArray()) {
                     for (JsonNode deviceNode : dataArray) {
                         Map<String, String> deviceMap = new HashMap<>();
-                        if (deviceNode.has("id")) {
-                            deviceMap.put("id", deviceNode.get("id").get("id").asText());
-                        }
-                        if (deviceNode.has("name")) {
-                            deviceMap.put("name", deviceNode.get("name").asText());
-                        }
-                        if (deviceNode.has("type")) {
-                            deviceMap.put("type", deviceNode.get("type").asText());
-                        }
+                        if (deviceNode.has("id")) deviceMap.put("id", deviceNode.get("id").get("id").asText());
+                        if (deviceNode.has("name")) deviceMap.put("name", deviceNode.get("name").asText());
+                        if (deviceNode.has("type")) deviceMap.put("type", deviceNode.get("type").asText());
                         devices.add(deviceMap);
                     }
                 }
-                log.info("✅ Fetched {} devices via customer API", devices.size());
             }
         } catch (Exception e) {
-            log.debug("Customer devices API not available: {}", e.getMessage());
+            log.debug("Customer devices API not available");
         }
         return devices;
     }
 
     // ==================== Telemetry ====================
 
-    /**
-     * Fetch latest telemetry for a specific device using the user's token.
-     */
     public Map<String, Object> getTelemetry(String userToken, String deviceId) {
-        return getTelemetry(userToken, deviceId, config.getAllowedKeys());
-    }
-
-    /**
-     * Fetch latest telemetry for a specific device using the user's token and specific keys.
-     */
-    public Map<String, Object> getTelemetry(String userToken, String deviceId, String keys) {
-        String url = config.getUrl()
-                + "/api/plugins/telemetry/DEVICE/"
-                + deviceId
-                + "/values/timeseries";
-        
-        if (keys != null && !keys.isBlank()) {
-            url += "?keys=" + keys;
-        }
-
-        log.debug("Fetching telemetry for device {} with user token", deviceId);
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/timeseries";
+        log.debug("Fetching all telemetry for device {} with user token", deviceId);
         Map<String, Object> result = new HashMap<>();
 
         try {
@@ -292,8 +200,7 @@ public class UserAwareThingsBoardClient {
                     if (valueArray.isArray() && !valueArray.isEmpty()) {
                         JsonNode valueNode = valueArray.get(0).get("value");
                         if (valueNode != null && !valueNode.isNull()) {
-                            String value = valueNode.asText();
-                            flattenAndPut(result, entry.getKey(), value, "User Telemetry");
+                            flattenAndPut(result, entry.getKey(), valueNode.asText(), "User Telemetry");
                         }
                     }
                 });
@@ -302,33 +209,14 @@ public class UserAwareThingsBoardClient {
         } catch (Exception e) {
             log.error("❌ Failed to fetch telemetry for device {}: {}", deviceId, e.getMessage());
         }
-
         return result;
     }
 
     // ==================== Attributes ====================
 
-    /**
-     * Fetch attributes for a specific device and scope using the user's token.
-     */
     public Map<String, Object> getAttributes(String userToken, String scope, String deviceId) {
-        return getAttributes(userToken, scope, deviceId, config.getAllowedKeys());
-    }
-
-    /**
-     * Fetch attributes for a specific device and scope using the user's token and specific keys.
-     */
-    public Map<String, Object> getAttributes(String userToken, String scope, String deviceId, String keys) {
-        String url = config.getUrl()
-                + "/api/plugins/telemetry/DEVICE/"
-                + deviceId
-                + "/values/attributes/" + scope;
-        
-        if (keys != null && !keys.isBlank()) {
-            url += "?keys=" + keys;
-        }
-
-        log.debug("Fetching {} attributes for device {} with user token", scope, deviceId);
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/attributes/" + scope;
+        log.debug("Fetching all {} attributes for device {} with user token", scope, deviceId);
         Map<String, Object> result = new HashMap<>();
 
         try {
@@ -350,19 +238,12 @@ public class UserAwareThingsBoardClient {
         } catch (Exception e) {
             log.error("❌ Failed to fetch {} attributes for device {}: {}", scope, deviceId, e.getMessage());
         }
-
         return result;
     }
 
-    /**
-     * Flatten a potentially JSON string value and put it into the result map.
-     * If value is not JSON, it is put as-is.
-     */
     private void flattenAndPut(Map<String, Object> result, String key, String value, String prefix) {
         if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) return;
-
         try {
-            // Check if it's a JSON object or array
             if ((value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"))) {
                 JsonNode node = objectMapper.readTree(value);
                 if (node.isObject()) {
@@ -375,35 +256,19 @@ public class UserAwareThingsBoardClient {
                     return;
                 }
             }
-        } catch (Exception e) {
-            // Not JSON or parse error, fall back to normal put
-        }
-
+        } catch (Exception e) {}
         result.put(key, value);
         log.info("📡 [{}] {} = {}", prefix, key, value);
     }
 
     // ==================== History ====================
 
-    /**
-     * Fetch historical telemetry for a specific device and key using the user's token.
-     */
     public Map<String, List<Map<String, Object>>> getHistory(String userToken, String deviceId, String key, long startTs, long endTs) {
-        String url = config.getUrl()
-                + "/api/plugins/telemetry/DEVICE/"
-                + deviceId
-                + "/values/timeseries?keys=" + key
-                + "&startTs=" + startTs
-                + "&endTs=" + endTs
-                + "&limit=100";
-
-        log.debug("Fetching history for key '{}' from {} to {} for device {}", key, startTs, endTs, deviceId);
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/timeseries?keys=" + key + "&startTs=" + startTs + "&endTs=" + endTs + "&limit=100";
         Map<String, List<Map<String, Object>>> result = new HashMap<>();
-
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 json.fields().forEachRemaining(entry -> {
@@ -416,13 +281,10 @@ public class UserAwareThingsBoardClient {
                     }
                     result.put(entry.getKey(), points);
                 });
-                log.debug("✅ Fetched {} history points for '{}'",
-                        result.values().stream().mapToInt(List::size).sum(), key);
             }
         } catch (Exception e) {
-            log.error("❌ Error fetching history for '{}': {}", key, e.getMessage());
+            log.error("❌ Error fetching history: {}", e.getMessage());
         }
-
         return result;
     }
 }

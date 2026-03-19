@@ -44,41 +44,31 @@ public class ChatService {
     private final ObjectMapper objectMapper;
 
     private static final String SYSTEM_PROMPT = """
-            You are an IoT device assistant. You help users understand the status and data
-            from their IoT devices connected to ThingsBoard.
+            MANDATORY OUTPUT FORMAT:
+            1. START every response with a **Bold Summary Line** (e.g. **BOI-DOBSON: Online** or **You have 11 devices**).
+            2. USE LISTS: If you are listing more than one device or category, ALWAYS use a clear bulleted list (using '-') for readability.
+            3. FOLLOW with a short reason in *Italics* citing the context data used.
+            4. NO FLUFF: Do not use phrases like "Based on the data" or "If you have more questions".
+            5. Accuracy is mandatory. Use the `total_devices` value from the context for counts.
 
-            You will receive real-time device data as context. Use this data to answer
-            questions accurately. Always refer to the actual values from the context.
+            STRICT PRIVACY & SPECIFICITY RULES:
+            - "Branch" and "Device" are interchangeable terms.
+            - EXCEPTION: You ARE allowed to list the NAMES of all devices if the user asks "What devices do I have?".
+            - NEVER provide a broad overview or "full info" of a branch unless the user specifies a category.
+            - KEYWORD PRIORITY: If the user mentions ANY category (CCTV, IAS, FAS, BAS, TLS, ACS, Battery, Hardware, Alarms), you MUST answer for that category immediately.
+            - If a request is purely generic (e.g. "Info on X"), reply: "I have the data for that branch. Please specify what you would like to check (e.g., Battery, Hardware Health, or specific systems like CCTV, IAS, or FAS)."
 
-            Guidelines:
-            - Be concise and informative
-            - If a value is not available in the context, say so honestly, UNLESS a SYSTEM_NOTE tells you otherwise.
-            - If the context contains a SYSTEM_NOTE, you MUST follow its instructions exactly.
-            - Use appropriate units when discussing sensor values
-            - Highlight any concerning values (low battery, high temperature, alarms)
-            - If asked about trends or history, mention that chart data can be requested
-            - Format numbers nicely (e.g., "67%" not "67.0")
-            - CRITICAL RULE FOR ONLINE STATUS: A branch or device is ONLY "Online" or "Active" if its `gateway` or `gwStatus` value is "Online" or "On". If `gateway`/`gwStatus` is "Offline" or missing, the branch is OFFLINE and INACTIVE. Do NOT claim it is active just because individual subsystems (like `integratedStatus` or `accessControl`) report "Healthy" or "true", as those are likely stale offline readings!
-            - When counting devices: "X out of Y devices are [status]".
-            - CRITICAL: You MUST double-check your count by looking at every single device in the context before providing a summary.
-            - If a list contains 5 items marked as "On", your summary MUST say "5 devices", not "4". Accuracy is mandatory.
-            - List specific device/branch names with their status
-            - Always cite the actual values from the data
-            - If uncertain, say "Based on the data provided..."
-            - For status questions, provide a clear yes/no or list of statuses
-            
-            EXAMPLES:
-            - User: "How many branches are offline?"
-              Context: BOI-DANKUNI.gateway=Online, BOI-CHANDANNAGAR.gateway=Offline, BOI-ARAMBAGH.gateway=Offline
-              Bot: "2 out of 3 branches are offline: BOI-CHANDANNAGAR and BOI-ARAMBAGH"
-            
-            - User: "Show me battery status"
-              Context: BOI-DANKUNI.battery_status=OK, BOI-CHANDANNAGAR.battery_status=Low
-              Bot: "Battery Status:\n- BOI-DANKUNI: OK\n- BOI-CHANDANNAGAR: Low (needs attention)"
-            
-            - User: "Which devices have alarms?"
-              Context: BOI-DANKUNI.alarmCount=0, BOI-CHANDANNAGAR.alarmCount=3
-              Bot: "1 device has active alarms: BOI-CHANDANNAGAR (3 alarms)"
+            SUB-DEVICE STATUS DEFINITIONS:
+            The status of the 6 sub-systems is determined ONLY by these attributes:
+            1. CCTV: `cctv`, 2. IAS: `ias`, 3. BAS: `bas`, 4. FAS: `fas`, 5. TLS: `timeLock`, 6. ACS: `accessControl`.
+            Values MUST be reported only as "Online", "Offline", or "N/A".
+
+            MANDATORY ACCURACY RULES:
+            - DEFINITIVE OFFLINE STATUS: A device is OFFLINE if its `gateway` or `status` is "Offline", "Fault", "N/A", or "Inactive". 
+            - When asked "which devices are offline", you MUST list ALL devices matching any of these 4 states.
+            - ONLINE STATUS: A device is ONLINE only if `gateway` or `gwStatus` is "Online" or "On".
+            - ZERO MEANS NO: If all `alarmCount` or `errorCount` are 0, state: "No, there are no active alarms (or errors)."
+            - DOUBLE-CHECK MATH: Physically count every item in the list before giving a summary. If you list 8 online devices, your summary MUST say 8.
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -473,19 +463,18 @@ public class ChatService {
         for (Map<String, Object> dev : devices) {
             String name = dev.getOrDefault("device_name", "unknown").toString();
             
-            // Only keep the 'Top 5' most critical status keys for the summary
+            // Critical keys for accuracy
+            summary.put(name + ".gateway", dev.getOrDefault("gateway", "N/A"));
             if (dev.containsKey("status")) summary.put(name + ".status", dev.get("status"));
             if (dev.containsKey("active")) summary.put(name + ".active", dev.get("active"));
             if (dev.containsKey("gwHealth")) summary.put(name + ".gwHealth", dev.get("gwHealth"));
-            if (dev.containsKey("gateway")) summary.put(name + ".gateway", dev.get("gateway"));
-            if (dev.containsKey("iasStatus")) summary.put(name + ".iasStatus", dev.get("iasStatus"));
-            if (dev.containsKey("cctvStatus")) summary.put(name + ".cctvStatus", dev.get("cctvStatus"));
-            if (dev.containsKey("battery_status")) summary.put(name + ".battery", dev.get("battery_status"));
-            if (dev.containsKey("BATTERY LOW")) summary.put(name + ".batteryLow", dev.get("BATTERY LOW"));
-            if (dev.containsKey("alarmCount")) summary.put(name + ".alarms", dev.get("alarmCount"));
+            if (dev.containsKey("ias")) summary.put(name + ".ias", dev.get("ias"));
+            if (dev.containsKey("cctv")) summary.put(name + ".cctv", dev.get("cctv"));
             
-            // Add a small note if it's inactive
-            if ("Inactive".equalsIgnoreCase(String.valueOf(dev.get("status"))) || "Fault".equalsIgnoreCase(String.valueOf(dev.get("gateway")))) {
+            // Add a definitive Offline flag for the AI
+            String g = String.valueOf(dev.get("gateway"));
+            String s = String.valueOf(dev.get("status"));
+            if ("Offline".equalsIgnoreCase(g) || "Fault".equalsIgnoreCase(g) || "N/A".equalsIgnoreCase(g) || "Inactive".equalsIgnoreCase(s)) {
                 summary.put(name + ".OPERATIONAL", "False");
             }
         }

@@ -124,11 +124,23 @@ public class ContextFilterUtil {
             String fullKey = entry.getKey();
             Object value = entry.getValue();
 
-            // Extract the actual key if it's prefixed with deviceName. (e.g., "DEVICE-A.battery_status" -> "battery_status")
+            // Extract the actual key if it's prefixed with deviceName.
             String actualKey = fullKey;
+            String prefix = "";
             if (fullKey.contains(".")) {
+                prefix = fullKey.substring(0, fullKey.lastIndexOf(".") + 1);
                 actualKey = fullKey.substring(fullKey.lastIndexOf(".") + 1);
             }
+
+            // --- NORMALIZATION: Map technical keys to the user's 6 Sub-System keys ---
+            if ("cctvStatus".equals(actualKey)) actualKey = "cctv";
+            else if ("iasStatus".equals(actualKey)) actualKey = "ias";
+            else if ("basStatus".equals(actualKey)) actualKey = "bas";
+            else if ("fireAlarmStatus".equals(actualKey) || "fasStatus".equals(actualKey)) actualKey = "fas";
+            else if ("timeLockHealth".equals(actualKey)) actualKey = "timeLock";
+            else if ("accessControlStatus".equals(actualKey)) actualKey = "accessControl";
+            
+            String finalKey = prefix + actualKey;
 
             // Skip if explicitly excluded
             if (shouldSkip(actualKey, fullKey)) {
@@ -139,9 +151,9 @@ public class ContextFilterUtil {
             if (IMPORTANT_KEYS.contains(actualKey) || IMPORTANT_KEYS.contains(fullKey)) {
                 String valueStr = String.valueOf(value);
                 if (isTooLarge(valueStr) && !actualKey.equals("SYSTEM_NOTE") && !actualKey.equals("available_devices_for_user_to_choose_from")) {
-                    filtered.put(fullKey, simplifyValue(valueStr));
+                    filtered.put(finalKey, simplifyValue(valueStr));
                 } else {
-                    filtered.put(fullKey, value);
+                    filtered.put(finalKey, value);
                 }
                 continue;
             }
