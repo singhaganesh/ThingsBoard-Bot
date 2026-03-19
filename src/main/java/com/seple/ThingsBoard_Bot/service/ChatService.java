@@ -59,10 +59,9 @@ public class ChatService {
             - If asked about trends or history, mention that chart data can be requested
             - Format numbers nicely (e.g., "67%" not "67.0")
             - CRITICAL RULE FOR ONLINE STATUS: A branch or device is ONLY "Online" or "Active" if its `gateway` or `gwStatus` value is "Online" or "On". If `gateway`/`gwStatus` is "Offline" or missing, the branch is OFFLINE and INACTIVE. Do NOT claim it is active just because individual subsystems (like `integratedStatus` or `accessControl`) report "Healthy" or "true", as those are likely stale offline readings!
-            - When answering questions about "how many" or "which" devices are inactive using summarized data, count ONLY the devices that have a `gwStatus` or `gateway` property explicitly stating they are offline/inactive. If a device has `[deviceName].gwStatus = Offline`, it is inactive.
-            
-            OUTPUT FORMAT:
-            - When counting devices: "X out of Y devices are [status]"
+            - When counting devices: "X out of Y devices are [status]".
+            - CRITICAL: You MUST double-check your count by looking at every single device in the context before providing a summary.
+            - If a list contains 5 items marked as "On", your summary MUST say "5 devices", not "4". Accuracy is mandatory.
             - List specific device/branch names with their status
             - Always cite the actual values from the data
             - If uncertain, say "Based on the data provided..."
@@ -465,74 +464,29 @@ public class ChatService {
     }
 
     /**
-     * Creates a lightweight summary of all devices for global questions (battery, status, alarms)
-     * without exceeding LLM token limits when a user has many devices.
+     * Creates an EXTREMELY lightweight summary of all devices for global questions.
+     * This ensures 10-20+ devices can fit into a single context window without loss.
      */
     private Map<String, Object> flattenDeviceSummary(List<Map<String, Object>> devices) {
         Map<String, Object> summary = new HashMap<>();
         summary.put("total_devices", devices.size());
         for (Map<String, Object> dev : devices) {
             String name = dev.getOrDefault("device_name", "unknown").toString();
-            if (dev.containsKey("battery_status")) summary.put(name + ".battery", dev.get("battery_status"));
+            
+            // Only keep the 'Top 5' most critical status keys for the summary
             if (dev.containsKey("status")) summary.put(name + ".status", dev.get("status"));
             if (dev.containsKey("active")) summary.put(name + ".active", dev.get("active"));
-            if (dev.containsKey("alarmCount")) summary.put(name + ".alarms", dev.get("alarmCount"));
-            if (dev.containsKey("temperature")) summary.put(name + ".temp", dev.get("temperature"));
-            if (dev.containsKey("branchName")) summary.put(name + ".branch", dev.get("branchName"));
-            if (dev.containsKey("gwStatus")) summary.put(name + ".gwStatus", dev.get("gwStatus"));
             if (dev.containsKey("gwHealth")) summary.put(name + ".gwHealth", dev.get("gwHealth"));
             if (dev.containsKey("gateway")) summary.put(name + ".gateway", dev.get("gateway"));
-            if (dev.containsKey("gatewayStatus")) summary.put(name + ".gatewayStatus", dev.get("gatewayStatus"));
             if (dev.containsKey("iasStatus")) summary.put(name + ".iasStatus", dev.get("iasStatus"));
-            if (dev.containsKey("fasStatus")) summary.put(name + ".fasStatus", dev.get("fasStatus"));
-            if (dev.containsKey("basStatus")) summary.put(name + ".basStatus", dev.get("basStatus"));
             if (dev.containsKey("cctvStatus")) summary.put(name + ".cctvStatus", dev.get("cctvStatus"));
-            if (dev.containsKey("cameraStatus")) summary.put(name + ".cameraStatus", dev.get("cameraStatus"));
-            if (dev.containsKey("integratedStatus")) summary.put(name + ".integratedStatus", dev.get("integratedStatus"));
-            if (dev.containsKey("accessControlStatus")) summary.put(name + ".accessControlStatus", dev.get("accessControlStatus"));
-            if (dev.containsKey("timeLockHealth")) summary.put(name + ".timeLockHealth", dev.get("timeLockHealth"));
-            
-            // Uptime & Activity
-            if (dev.containsKey("uptimeTotal")) summary.put(name + ".uptimeTotal", dev.get("uptimeTotal"));
-            if (dev.containsKey("uptimeHeartbeat")) summary.put(name + ".uptimeHeartbeat", dev.get("uptimeHeartbeat"));
-            if (dev.containsKey("inactivityAlarmTime")) {
-                Object inactTime = dev.get("inactivityAlarmTime");
-                summary.put(name + ".inactivityAlarmTime", formatTimestamp(inactTime));
-            }
-            
-            // Hardware Stats
-            if (dev.containsKey("cpu")) summary.put(name + ".cpu", dev.get("cpu"));
-            if (dev.containsKey("memory")) summary.put(name + ".memory", dev.get("memory"));
-            if (dev.containsKey("disk")) summary.put(name + ".disk", dev.get("disk"));
-            if (dev.containsKey("temperature")) summary.put(name + ".temperature", dev.get("temperature"));
-            
-            // Power
-            if (dev.containsKey("ac_status")) summary.put(name + ".ac_status", dev.get("ac_status"));
-            if (dev.containsKey("POWER OFF")) summary.put(name + ".powerOff", dev.get("POWER OFF"));
-            if (dev.containsKey("SYSTEM ON")) summary.put(name + ".systemOn", dev.get("SYSTEM ON"));
-            if (dev.containsKey("MAINS ON")) summary.put(name + ".mainsOn", dev.get("MAINS ON"));
+            if (dev.containsKey("battery_status")) summary.put(name + ".battery", dev.get("battery_status"));
             if (dev.containsKey("BATTERY LOW")) summary.put(name + ".batteryLow", dev.get("BATTERY LOW"));
+            if (dev.containsKey("alarmCount")) summary.put(name + ".alarms", dev.get("alarmCount"));
             
-            // Network
-            if (dev.containsKey("NETWORK")) summary.put(name + ".network", dev.get("NETWORK"));
-            
-            // Error counts
-            if (dev.containsKey("errorCount")) summary.put(name + ".errorCount", dev.get("errorCount"));
-            if (dev.containsKey("IASinactiveCOUNT")) summary.put(name + ".iasInactiveCount", dev.get("IASinactiveCOUNT"));
-            if (dev.containsKey("IASfaultCOUNT")) summary.put(name + ".iasFaultCount", dev.get("IASfaultCOUNT"));
-            
-            // Format timestamps to human-readable format
-            if (dev.containsKey("lastActivityTime")) {
-                Object activityTime = dev.get("lastActivityTime");
-                summary.put(name + ".lastActivityTime", formatTimestamp(activityTime));
-            }
-            if (dev.containsKey("lastConnectTime")) {
-                Object connectTime = dev.get("lastConnectTime");
-                summary.put(name + ".lastConnectTime", formatTimestamp(connectTime));
-            }
-            if (dev.containsKey("lastDisconnectTime")) {
-                Object disconnectTime = dev.get("lastDisconnectTime");
-                summary.put(name + ".lastDisconnectTime", formatTimestamp(disconnectTime));
+            // Add a small note if it's inactive
+            if ("Inactive".equalsIgnoreCase(String.valueOf(dev.get("status"))) || "Fault".equalsIgnoreCase(String.valueOf(dev.get("gateway")))) {
+                summary.put(name + ".OPERATIONAL", "False");
             }
         }
         return summary;

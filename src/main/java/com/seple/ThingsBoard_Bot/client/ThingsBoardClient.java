@@ -160,12 +160,11 @@ public class ThingsBoardClient {
                         JsonNode valueNode = valueArray.get(0).get("value");
                         if (valueNode != null && !valueNode.isNull()) {
                             String value = valueNode.asText();
-                            result.put(entry.getKey(), value);
-                            log.info("📡 [Telemetry] {} = {}", entry.getKey(), value);
+                            flattenAndPut(result, entry.getKey(), value, "Telemetry");
                         }
                     }
                 });
-                log.info("✅ Fetched {} valid telemetry keys", result.size());
+                log.info("✅ Fetched {} valid telemetry data points", result.size());
             }
         } catch (RestClientException e) {
             log.error("❌ Failed to fetch telemetry: {}", e.getMessage());
@@ -240,11 +239,10 @@ public class ThingsBoardClient {
                         String key = attr.get("key").asText();
                         JsonNode valueNode = attr.get("value");
                         String value = valueNode.isTextual() ? valueNode.asText() : valueNode.toString();
-                        result.put(key, value);
-                        log.info("🏷️ [Attribute - {}] {} = {}", scope, key, value);
+                        flattenAndPut(result, key, value, "Attribute - " + scope);
                     }
                 }
-                log.info("✅ Fetched {} {} attributes", result.size(), scope);
+                log.info("✅ Fetched {} valid {} attributes", result.size(), scope);
             }
         } catch (RestClientException e) {
             log.error("❌ Failed to fetch {} attributes: {}", scope, e.getMessage());
@@ -253,6 +251,35 @@ public class ThingsBoardClient {
         }
 
         return result;
+    }
+
+    /**
+     * Flatten a potentially JSON string value and put it into the result map.
+     * If value is not JSON, it is put as-is.
+     */
+    private void flattenAndPut(Map<String, Object> result, String key, String value, String prefix) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) return;
+
+        try {
+            // Check if it's a JSON object or array
+            if ((value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"))) {
+                JsonNode node = objectMapper.readTree(value);
+                if (node.isObject()) {
+                    node.fields().forEachRemaining(entry -> {
+                        String subKey = key + "_" + entry.getKey();
+                        String subValue = entry.getValue().isTextual() ? entry.getValue().asText() : entry.getValue().toString();
+                        result.put(subKey, subValue);
+                        log.info(" [{}] {} = {}", prefix, subKey, subValue);
+                    });
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            // Not JSON or parse error, fall back to normal put
+        }
+
+        result.put(key, value);
+        log.info("📡 [{}] {} = {}", prefix, key, value);
     }
 
     // ==================== History (for Charts) ====================
