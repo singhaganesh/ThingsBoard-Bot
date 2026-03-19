@@ -45,18 +45,20 @@ public class ChatService {
 
     private static final String SYSTEM_PROMPT = """
             MANDATORY OUTPUT FORMAT:
-            1. START every response with a **Bold Summary Line** (e.g. **BOI-DOBSON: Online** or **You have 11 devices**).
-            2. USE LISTS: If you are listing more than one device or category, ALWAYS use a clear bulleted list (using '-') for readability.
-            3. FOLLOW with a short reason in *Italics* citing the context data used.
-            4. NO FLUFF: Do not use phrases like "Based on the data" or "If you have more questions".
-            5. Accuracy is mandatory. Use the `total_devices` value from the context for counts.
+            1. START every response with a **Bold Summary Line** (e.g. **BRANCH BALLY BAZAR: Online** or **You have 11 branches**).
+            2. USE LISTS: If you are listing more than one branch or category, ALWAYS use a clear bulleted list (using '-') for readability.
+            3. TERMINOLOGY: Always use the word "Branch" instead of "Device".
+            4. NAMES: Use the `branchName` value from the context as the primary name for every branch.
+            5. FOLLOW with a short reason in *Italics* citing the context data used.
+            6. NO FLUFF: Do not use phrases like "Based on the data" or "If you have more questions".
+            7. Accuracy is mandatory. Use the `total_devices` value from the context for counts.
 
             STRICT PRIVACY & SPECIFICITY RULES:
             - "Branch" and "Device" are interchangeable terms.
-            - EXCEPTION: You ARE allowed to list the NAMES of all devices if the user asks "What devices do I have?".
-            - NEVER provide a broad overview or "full info" of a branch unless the user specifies a category.
-            - KEYWORD PRIORITY: If the user mentions ANY category (CCTV, IAS, FAS, BAS, TLS, ACS, Battery, Hardware, Alarms), you MUST answer for that category immediately.
-            - If a request is purely generic (e.g. "Info on X"), reply: "I have the data for that branch. Please specify what you would like to check (e.g., Battery, Hardware Health, or specific systems like CCTV, IAS, or FAS)."
+            - EXCEPTION: You ARE allowed to list the NAMES of all branches if the user asks "What branches do I have?", "List all my branches", "List my devices", or asks for an overview.
+            - NEVER provide detailed telemetry (Battery, Alarms, etc.) or a "full info" overview of a specific branch unless the user specifies a category.
+            - KEYWORD PRIORITY: If the user mentions ANY specific category (CCTV, IAS, FAS, BAS, TLS, ACS, Battery, Hardware, Alarms, Voltage, Temperature), you MUST provide the answer immediately.
+            - If a request is purely generic (e.g. "Status of BRANCH DOBSON" or "Info on X"), reply: "I have the data for that branch. Please specify what you would like to check (e.g., Battery, Hardware Health, or specific systems like CCTV, IAS, FAS, BAS, TLS, or ACS)."
 
             SUB-DEVICE STATUS DEFINITIONS:
             The status of the 6 sub-systems is determined ONLY by these attributes:
@@ -64,11 +66,11 @@ public class ChatService {
             Values MUST be reported only as "Online", "Offline", or "N/A".
 
             MANDATORY ACCURACY RULES:
-            - DEFINITIVE OFFLINE STATUS: A device is OFFLINE if its `gateway` or `status` is "Offline", "Fault", "N/A", or "Inactive". 
-            - When asked "which devices are offline", you MUST list ALL devices matching any of these 4 states.
-            - ONLINE STATUS: A device is ONLINE only if `gateway` or `gwStatus` is "Online" or "On".
+            - DEFINITIVE OFFLINE STATUS: A branch is OFFLINE if its `gateway` or `status` is "Offline", "Fault", "N/A", or "Inactive". 
+            - When asked "which branches are offline", you MUST list ALL branches matching any of these 4 states.
+            - ONLINE STATUS: A branch is ONLINE only if `gateway` or `gwStatus` is "Online" or "On".
             - ZERO MEANS NO: If all `alarmCount` or `errorCount` are 0, state: "No, there are no active alarms (or errors)."
-            - DOUBLE-CHECK MATH: Physically count every item in the list before giving a summary. If you list 8 online devices, your summary MUST say 8.
+            - DOUBLE-CHECK MATH: Physically count every item in the list before giving a summary. If you list 8 online branches, your summary MUST say 8.
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -368,7 +370,8 @@ public class ChatService {
             isGlobalQuery = currentQ.contains("all") || currentQ.contains("any") 
                             || currentQ.contains("which") || currentQ.contains("my devices")
                             || currentQ.contains("what") || currentQ.contains("how many")
-                            || currentQ.contains("list") || currentQ.contains("overview");
+                            || currentQ.contains("list") || currentQ.contains("overview")
+                            || currentQ.contains("branches");
         }
         
         // 1. If it's a generic overview query, send a highly summarized device list.
@@ -376,7 +379,7 @@ public class ChatService {
         if (isGlobalQuery) {
             chatMemoryService.setActiveDevices(sessionId, new ArrayList<>()); // clear active zoom
             flat = flattenDeviceSummary(allDevices);
-            flat.put("SYSTEM_NOTE", "The user asked a general/overview question across all their devices. A summary of all devices is provided. Answer based on this data. For questions about specific device details, please ask about a specific device name.");
+            flat.put("SYSTEM_NOTE", "The user asked a general/overview question across all their branches. A summary of all branches is provided. Answer based on this data. For questions about specific branch details, please ask about a specific branch name.");
         } 
         // 2. If matched specific devices, tightly bound how many we expand.
         else if (!matchedDevices.isEmpty()) {
@@ -393,7 +396,7 @@ public class ChatService {
             } else {
                 // Too many to expand safely - use summary
                 flat = flattenDeviceSummary(matchedDevices);
-                flat.put("SYSTEM_NOTE", "Multiple devices matched the context (" + matchedDevices.size() + "). A lightweight summary of these devices is provided to save tokens. If detailed telemetry is needed for a specific device, ask the user to specify just one.");
+                flat.put("SYSTEM_NOTE", "Multiple branches matched the context (" + matchedDevices.size() + "). A lightweight summary of these branches is provided to save tokens. If detailed telemetry is needed for a specific branch, ask the user to specify just one.");
             }
         } 
         // 3. If no match but less than 6 devices total, use all (small enough context).
@@ -415,17 +418,17 @@ public class ChatService {
                         flat = flattenDeviceList(sessionMatched);
                     } else {
                         flat = flattenDeviceSummary(sessionMatched);
-                        flat.put("SYSTEM_NOTE", "Multiple devices matched the context from previous session (" + sessionMatched.size() + "). A lightweight summary is provided to save tokens. Ask the user to specify one if they need full telemetry.");
+                        flat.put("SYSTEM_NOTE", "Multiple branches matched the context from previous session (" + sessionMatched.size() + "). A lightweight summary is provided to save tokens. Ask the user to specify one if they need full telemetry.");
                     }
                     return flat;
                 }
             }
 
             // 5. Still no match? Force the user to specify.
-            flat.put("SYSTEM_NOTE", "CRITICAL INSTRUCTION: There are too many devices (" + allDevices.size() + ") to show full telemetry for at once, and the user didn't specify one. You MUST reply by asking the user to specify which device they want to check (for example, refer to the available_devices_for_user_to_choose_from list). Do NOT say you don't have access to the data.");
+            flat.put("SYSTEM_NOTE", "CRITICAL INSTRUCTION: There are too many branches (" + allDevices.size() + ") to show full telemetry for at once, and the user didn't specify one. You MUST reply by asking the user to specify which branch they want to check (for example, refer to the available_devices_for_user_to_choose_from list). Do NOT say you don't have access to the data.");
             List<String> names = new ArrayList<>();
             for (Map<String, Object> dev : allDevices) {
-                names.add((String) dev.getOrDefault("device_name", "Unknown"));
+                names.add((String) dev.getOrDefault("branchName", "Unknown"));
             }
             flat.put("available_devices_for_user_to_choose_from", names);
         }
@@ -444,7 +447,7 @@ public class ChatService {
         } else {
             flat.put("total_devices_in_context", devices.size());
             for (Map<String, Object> deviceData : devices) {
-                String name = deviceData.getOrDefault("device_name", "unknown").toString();
+                String name = deviceData.getOrDefault("branchName", "unknown").toString();
                 for (Map.Entry<String, Object> entry : deviceData.entrySet()) {
                     flat.put(name + "." + entry.getKey(), entry.getValue());
                 }
@@ -461,7 +464,7 @@ public class ChatService {
         Map<String, Object> summary = new HashMap<>();
         summary.put("total_devices", devices.size());
         for (Map<String, Object> dev : devices) {
-            String name = dev.getOrDefault("device_name", "unknown").toString();
+            String name = dev.getOrDefault("branchName", "unknown").toString();
             
             // Critical keys for accuracy
             summary.put(name + ".gateway", dev.getOrDefault("gateway", "N/A"));
