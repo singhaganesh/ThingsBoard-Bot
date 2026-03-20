@@ -46,21 +46,27 @@ public class ChatService {
             7. NO FLUFF: Skip introductory phrases and polite closings.
 
             ACCURACY & ACCOUNTABILITY:
-            - SYSTEM_NOTE: ALWAYS follow the instructions in the SYSTEM_NOTE provided in the context. It contains the correct counts.
-            - ZERO OMISSION: You must account for EVERY branch provided in the context. 
-            - CRITICAL OFFLINE RULE: If a branch has `OPERATIONAL: False`, it is strictly FORBIDDEN from being in the Online list.
-            - OFFLINE DEFINITION: A branch is OFFLINE if its `unified_status` contains "Offline", "Fault", "N/A", or "Inactive".
-            - ONLINE DEFINITION: A branch is ONLINE ONLY if its `unified_status` contains "Online" or "On" AND `OPERATIONAL` is "True".
+            - SYSTEM_NOTE: ALWAYS follow the instructions in the SYSTEM_NOTE provided in the context.
+            - ZERO OMISSION: You must account for EVERY branch provided in the context.
+            - INDEPENDENT STATUS: Every sub-system (CCTV, IAS, etc.) has its own value. 
+            - CRITICAL: A sub-system can be "Online" even if the Branch Gateway is "Offline". Report the individual value exactly as it appears.
+            - OFFLINE DEFINITION (BRANCH): A branch is OFFLINE only if its `gateway` status is "Offline", "Fault", "N/A", or "Inactive".
+            - ONLINE DEFINITION (BRANCH): A branch is ONLINE only if its `gateway` is "Online" or "On".
             - DOUBLE-CHECK MATH: Physically count every unique branch name in your list before writing the summary header.
 
             STRICT PRIVACY:
-            - EXCEPTION: You ARE allowed to list the NAMES of all branches if asked.
-            - NEVER provide detailed telemetry (Battery, Alarms, etc.) unless a category is specified.
-            - CATEGORY PRIORITY: If a category (CCTV, IAS, FAS, BAS, TLS, ACS, Battery, Hardware, Alarms, Voltage, Temperature), you MUST answer immediately.
+            - NEVER provide a broad overview or "full info" of a branch unless a category is specified.
+            - CATEGORY PRIORITY: If a category (CCTV, IAS, FAS, etc.) is mentioned, answer immediately using its individual value.
 
-            SUB-DEVICE INDICATORS:
-            - CCTV: `cctv`, IAS: `ias`, BAS: `bas`, FAS: `fas`, TLS: `timeLock`, ACS: `accessControl`.
-            - Values MUST be reported as "Online", "Offline", or "N/A".
+            SUB-DEVICE INDICATORS (THE TRUTH):
+            Use ONLY these attributes for sub-system status:
+            1. CCTV: `cctv`
+            2. Integrated Alarm System (IAS): `ias`
+            3. Burglar Alarm System (BAS): `bas`
+            4. Fire Alarm System (FAS): `fas`
+            5. Time Lock System (TLS): `timeLock`
+            6. Access Control System (ACS): `accessControl`
+            Values MUST be reported exactly as: "Online", "Offline", or "N/A".
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -87,39 +93,15 @@ public class ChatService {
 
             Map<String, Object> filteredData = ContextFilterUtil.filterAttributes(rawData);
             
-            // SECOND PASS: If context is still huge, keep ONLY keys relevant to the current question keywords
+            // SECOND PASS: Keyword-based pruning for efficiency
             int estimateBefore = TokenCounterService.countMessageTokens(SYSTEM_PROMPT, history, request.getQuestion(), objectMapper.writeValueAsString(filteredData));
             if (!TokenCounterService.fitsInContextWindow(estimateBefore)) {
-                log.info("⚠️ Context still too large ({} tokens). Applying keyword-based pruning...", estimateBefore);
                 Map<String, Object> prunedData = new HashMap<>();
                 String q = request.getQuestion().toLowerCase();
-                
-                // Always keep identity and operational status
                 for (Map.Entry<String, Object> entry : filteredData.entrySet()) {
                     String k = entry.getKey().toLowerCase();
-                    if (k.contains("name") || k.contains("id") || k.contains("gateway") || k.contains("status") || k.contains("operational") || k.contains("unified_status") || k.contains("system_note")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("cctv") && k.contains("cctv")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("ias") && k.contains("ias")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("fas") && k.contains("fas")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("bas") && k.contains("bas")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if ((q.contains("tls") || q.contains("time")) && k.contains("timelock")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if ((q.contains("acs") || q.contains("access")) && k.contains("accesscontrol")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("battery") && k.contains("battery")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("alarm") && k.contains("alarm")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("voltage") && k.contains("voltage")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("cpu") && k.contains("cpu")) {
-                        prunedData.put(entry.getKey(), entry.getValue());
-                    } else if (q.contains("temperature") && k.contains("temperature")) {
+                    if (k.contains("name") || k.contains("id") || k.contains("gateway") || k.contains("status") || k.contains("operational") || k.contains("unified_status") || k.contains("system_note") || 
+                        k.contains("cctv") || k.contains("ias") || k.contains("fas") || k.contains("bas") || k.contains("timelock") || k.contains("accesscontrol")) {
                         prunedData.put(entry.getKey(), entry.getValue());
                     }
                 }
@@ -127,17 +109,12 @@ public class ChatService {
             }
 
             String contextJson = objectMapper.writeValueAsString(filteredData);
-
             int totalTokens = TokenCounterService.countMessageTokens(SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
 
             while (!TokenCounterService.fitsInContextWindow(totalTokens) && !history.isEmpty()) {
                 chatMemoryService.removeOldestMessage(sessionId);
                 history = chatMemoryService.getHistory(sessionId);
                 totalTokens = TokenCounterService.countMessageTokens(SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
-            }
-
-            if (!TokenCounterService.fitsInContextWindow(totalTokens)) {
-                throw new ContextOverflowException("Context too large.");
             }
 
             String queryInstruction = detectQueryInstructions(request.getQuestion(), filteredData);
@@ -164,7 +141,7 @@ public class ChatService {
         String q = question.toLowerCase();
         StringBuilder instr = new StringBuilder();
         if (q.contains("how many") || q.contains("which") || q.contains("what")) {
-            instr.append("\nCRITICAL: You must account for every branch. If OPERATIONAL is False, the branch is Offline. Do not list offline branches as Online.");
+            instr.append("\nCRITICAL: Report individual sub-system values (CCTV, IAS, etc.) exactly as they appear in context, even if the main gateway is offline.");
         }
         return instr.toString();
     }
@@ -199,7 +176,6 @@ public class ChatService {
         }
         
         List<Map<String, Object>> matchedDevices = new ArrayList<>(uniqueMatchedDevices.values());
-        
         boolean isGlobal = question != null && (qLower.contains("all") || qLower.contains("any") || qLower.contains("which") || qLower.contains("list") || qLower.contains("branches") || qLower.contains("devices") || qLower.contains("have"));
 
         Map<String, Object> flat;
@@ -212,37 +188,22 @@ public class ChatService {
             chatMemoryService.setActiveDevices(sessionId, activeNames);
             flat = matchedDevices.size() <= 5 ? flattenDeviceList(matchedDevices) : flattenDeviceSummary(matchedDevices);
         } else {
-            List<Map<String, Object>> sessionMatched = new ArrayList<>();
-            List<String> activeSessionDevices = chatMemoryService.getActiveDevices(sessionId);
-            for (Map<String, Object> dev : allDevices) {
-                if (activeSessionDevices.contains(getBestName(dev))) sessionMatched.add(dev);
-            }
-            if (!sessionMatched.isEmpty()) {
-                flat = sessionMatched.size() <= 5 ? flattenDeviceList(sessionMatched) : flattenDeviceSummary(sessionMatched);
-            } else {
-                flat = new HashMap<>();
-                List<String> names = new ArrayList<>();
-                for (Map<String, Object> dev : allDevices) names.add(getBestName(dev));
-                flat.put("available_branches", names);
-                flat.put("SYSTEM_NOTE", "Ask user to specify a branch name.");
-                return flat;
-            }
+            flat = new HashMap<>();
+            List<String> names = new ArrayList<>();
+            for (Map<String, Object> dev : allDevices) names.add(getBestName(dev));
+            flat.put("available_branches", names);
+            flat.put("SYSTEM_NOTE", "Ask user to specify a branch name.");
+            return flat;
         }
 
-        // --- INJECT SYSTEM NOTE WITH CALCULATED COUNTS ---
         if (isGlobal) {
             int online = 0;
             int offline = 0;
             for (Map<String, Object> dev : allDevices) {
                 String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
-                String s = String.valueOf(dev.getOrDefault("status", "N/A"));
-                if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) {
-                    online++;
-                } else {
-                    offline++;
-                }
+                if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) online++; else offline++;
             }
-            flat.put("SYSTEM_NOTE", String.format("MANDATORY: There are exactly %d Online and %d Offline branches. Your header MUST say 'Total: %d Online | %d Offline'. Do not use any other numbers.", online, offline, online, offline));
+            flat.put("SYSTEM_NOTE", String.format("MANDATORY: There are exactly %d Online and %d Offline branches. Your header MUST say 'Total: %d Online | %d Offline'.", online, offline, online, offline));
         }
         
         return flat;
@@ -250,12 +211,7 @@ public class ChatService {
 
     private String getBestName(Map<String, Object> dev) {
         Object bName = dev.get("branchName");
-        if (bName != null && !bName.toString().isBlank() && !"unknown".equalsIgnoreCase(bName.toString())) {
-            String name = bName.toString();
-            // Clean names like "BOI-R-BAZAR" to "R-BAZAR" if requested
-            if (name.startsWith("BRANCH ")) return name;
-            return name;
-        }
+        if (bName != null && !bName.toString().isBlank() && !"unknown".equalsIgnoreCase(bName.toString())) return bName.toString();
         return String.valueOf(dev.getOrDefault("device_name", "Unknown Branch"));
     }
 
@@ -280,9 +236,18 @@ public class ChatService {
             String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
             String s = String.valueOf(dev.getOrDefault("status", "N/A"));
             
-            String unifiedStatus = String.format("Gateway: %s, Status: %s", g, s);
-            summary.put(name + ".unified_status", unifiedStatus);
+            summary.put(name + ".gateway", g);
+            summary.put(name + ".status", s);
+            summary.put(name + ".unified_status", String.format("Gateway: %s, Status: %s", g, s));
             
+            // Sub-System Individual Values
+            if (dev.containsKey("cctv")) summary.put(name + ".cctv", dev.get("cctv"));
+            if (dev.containsKey("ias")) summary.put(name + ".ias", dev.get("ias"));
+            if (dev.containsKey("bas")) summary.put(name + ".bas", dev.get("bas"));
+            if (dev.containsKey("fas")) summary.put(name + ".fas", dev.get("fas"));
+            if (dev.containsKey("timeLock")) summary.put(name + ".timeLock", dev.get("timeLock"));
+            if (dev.containsKey("accessControl")) summary.put(name + ".accessControl", dev.get("accessControl"));
+
             if ("Offline".equalsIgnoreCase(g) || "Fault".equalsIgnoreCase(g) || "N/A".equalsIgnoreCase(g) || "Inactive".equalsIgnoreCase(s)) {
                 summary.put(name + ".OPERATIONAL", "False");
             } else {
