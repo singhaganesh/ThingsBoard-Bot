@@ -1,0 +1,97 @@
+Q1. What devices do I have?
+Total: 9 Online | 2 Offline
+
+- Online Branches:
+- LILUAH
+- BALLY BAZAR
+- SERAMPORE
+- TARAKESHWAR
+- DANKUNI
+- ARAMBAGH
+- CHANDANNAGAR
+- DOBSON LANE
+
+- Offline Branches:
+- CHINSURAH
+- BHADRESWAR
+
+The counts and statuses are based on the operational status and unified status provided in the context data.
+986 tokens
+Q2.Which branches are currently offline?
+Total: 9 Online | 2 Offline
+
+- Offline Branches:
+- CHINSURAH
+- BOI-R-BAZAR
+
+The counts and statuses are based on the operational status and unified status provided in the context data.
+986 tokens
+Q3.How many branches are online right now?
+Total: 9 Online | 2 Offline
+
+- Online Branches:
+- LILUAH
+- BALLY BAZAR
+- SERAMPORE
+- TARAKESHWAR
+- DANKUNI
+- ARAMBAGH
+- CHANDANNAGAR
+- DOBSON LANE
+
+- Offline Branches:
+- CHINSURAH
+- BOI-R-BAZAR
+
+The counts and statuses are based on the operational status and unified status provided in the context data.
+952 tokens
+Q4.What is the CCTV status of BRANCH LILUAH?
+BRANCH LILUAH: Online
+
+The operational status is "True" and the unified status indicates it is healthy, which confirms it is online.
+957 tokens
+Q5.Is the Fire Alarm (FAS) online for BRANCH BALLY BAZAR?
+BRANCH BALLY BAZAR: Online
+
+The operational status is "True" and the unified status indicates it is healthy, confirming it is online.
+946 tokens
+Q6.Check the IAS and BAS status for BRANCH DANKUNI.
+Total: 9 Online | 2 Offline
+
+BRANCH DANKUNI: IAS - Online | BAS - Online
+
+Both IAS and BAS statuses are online as the operational status is "True" and the unified status indicates it is healthy.
+899 tokens
+Q7.Give me the basic info of BRANCH DOBSON LANE
+BRANCH DOBSON LANE: Online
+
+The operational status is "True" and the unified status indicates it is healthy, confirming it is online.
+917 tokens
+Q8.What is the status of BRANCH CHINSURAH?
+Something went wrong.
+Q9.What is the status of BRANCH CHINSURAH?
+BRANCH CHINSURAH: Offline
+- Reason: Its unified_status contains "Inactive" and OPERATIONAL is "False".
+6637 tokens
+Q10.What is the status of BRANCH CHINSURAH?
+BRANCH CHINSURAH: Offline
+- Reason: Its OPERATIONAL status is "False" and unified_status contains "Inactive".
+6675 tokens
+Q11."What is the battery voltage of BRANCH ARAMBAGH?
+Something went wrong.
+"What is the battery voltage of BRANCH ARAMBAGH?
+Total: 1 Online | 0 Offline
+
+- BRANCH ARAMBAGH: Online
+- Unified status is "Online" and operational status is "True".
+
+- Battery Voltage: 14.0
+6241 tokens
+Q12.Tell me the CPU and Temperature of BRANCH SERAMPORE.
+Something went wrong.
+Tell me the CPU and Temperature of BRANCH SERAMPORE.
+BRANCH SERAMPORE: CPU and Temperature Data
+- CPU: 6.8
+- Temperature: 58.426
+
+The values are directly extracted from the context data for CPU and temperature related to BRANCH SERAMPORE.

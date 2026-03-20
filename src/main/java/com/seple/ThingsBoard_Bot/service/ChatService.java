@@ -23,14 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Core chat service — the HEART of the application.
- * <p>
- * Orchestrates the full Q&A flow:
- * 1. Fetch device data (cached via DataService)
- * 2. Filter context (reduce tokens)
- * 3. Count tokens (validate before OpenAI call)
- * 4. Call OpenAI with system prompt + context + question
- * 5. Return formatted response
- * </p>
  */
 @Slf4j
 @Service
@@ -45,32 +37,30 @@ public class ChatService {
 
     private static final String SYSTEM_PROMPT = """
             MANDATORY OUTPUT FORMAT:
-            1. START every response with a **Bold Summary Line** (e.g. **BRANCH BALLY BAZAR: Online** or **You have 11 branches**).
-            2. USE LISTS: If you are listing more than one branch or category, ALWAYS use a clear bulleted list (using '-') for readability.
-            3. TERMINOLOGY: Always use the word "Branch" instead of "Device".
-            4. NAMES: Use the `branchName` value from the context as the primary name for every branch.
-            5. FOLLOW with a short reason in *Italics* citing the context data used.
-            6. NO FLUFF: Do not use phrases like "Based on the data" or "If you have more questions".
-            7. Accuracy is mandatory. Use the `total_devices` value from the context for counts.
+            1. GLOBAL QUERIES (e.g. "which branches are online"): START with a **Bold Summary Header**: **Total: [X] Online | [Y] Offline**.
+            2. SPECIFIC QUERIES (e.g. "status of branch X"): START with a **Bold Summary Line**: **[Branch Name]: [Status]**.
+            3. USE LISTS: If listing more than one item, ALWAYS use a bulleted list ('-').
+            4. TERMINOLOGY: Always use "Branch" instead of "Device".
+            5. NAMES: Use the provided name from the context. Each name must appear exactly ONCE in your response.
+            6. FOLLOW with a short reason in *Italics* citing the context data used.
+            7. NO FLUFF: Skip introductory phrases and polite closings.
 
-            STRICT PRIVACY & SPECIFICITY RULES:
-            - "Branch" and "Device" are interchangeable terms.
-            - EXCEPTION: You ARE allowed to list the NAMES of all branches if the user asks "What branches do I have?", "List all my branches", "List my devices", or asks for an overview.
-            - NEVER provide detailed telemetry (Battery, Alarms, etc.) or a "full info" overview of a specific branch unless the user specifies a category.
-            - KEYWORD PRIORITY: If the user mentions ANY specific category (CCTV, IAS, FAS, BAS, TLS, ACS, Battery, Hardware, Alarms, Voltage, Temperature), you MUST provide the answer immediately.
-            - If a request is purely generic (e.g. "Status of BRANCH DOBSON" or "Info on X"), reply: "I have the data for that branch. Please specify what you would like to check (e.g., Battery, Hardware Health, or specific systems like CCTV, IAS, FAS, BAS, TLS, or ACS)."
+            ACCURACY & ACCOUNTABILITY:
+            - SYSTEM_NOTE: ALWAYS follow the instructions in the SYSTEM_NOTE provided in the context. It contains the correct counts.
+            - ZERO OMISSION: You must account for EVERY branch provided in the context. 
+            - CRITICAL OFFLINE RULE: If a branch has `OPERATIONAL: False`, it is strictly FORBIDDEN from being in the Online list.
+            - OFFLINE DEFINITION: A branch is OFFLINE if its `unified_status` contains "Offline", "Fault", "N/A", or "Inactive".
+            - ONLINE DEFINITION: A branch is ONLINE ONLY if its `unified_status` contains "Online" or "On" AND `OPERATIONAL` is "True".
+            - DOUBLE-CHECK MATH: Physically count every unique branch name in your list before writing the summary header.
 
-            SUB-DEVICE STATUS DEFINITIONS:
-            The status of the 6 sub-systems is determined ONLY by these attributes:
-            1. CCTV: `cctv`, 2. IAS: `ias`, 3. BAS: `bas`, 4. FAS: `fas`, 5. TLS: `timeLock`, 6. ACS: `accessControl`.
-            Values MUST be reported only as "Online", "Offline", or "N/A".
+            STRICT PRIVACY:
+            - EXCEPTION: You ARE allowed to list the NAMES of all branches if asked.
+            - NEVER provide detailed telemetry (Battery, Alarms, etc.) unless a category is specified.
+            - CATEGORY PRIORITY: If a category (CCTV, IAS, FAS, BAS, TLS, ACS, Battery, Hardware, Alarms, Voltage, Temperature), you MUST answer immediately.
 
-            MANDATORY ACCURACY RULES:
-            - DEFINITIVE OFFLINE STATUS: A branch is OFFLINE if its `gateway` or `status` is "Offline", "Fault", "N/A", or "Inactive". 
-            - When asked "which branches are offline", you MUST list ALL branches matching any of these 4 states.
-            - ONLINE STATUS: A branch is ONLINE only if `gateway` or `gwStatus` is "Online" or "On".
-            - ZERO MEANS NO: If all `alarmCount` or `errorCount` are 0, state: "No, there are no active alarms (or errors)."
-            - DOUBLE-CHECK MATH: Physically count every item in the list before giving a summary. If you list 8 online branches, your summary MUST say 8.
+            SUB-DEVICE INDICATORS:
+            - CCTV: `cctv`, IAS: `ias`, BAS: `bas`, FAS: `fas`, TLS: `timeLock`, ACS: `accessControl`.
+            - Values MUST be reported as "Online", "Offline", or "N/A".
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -82,456 +72,229 @@ public class ChatService {
         this.objectMapper = new ObjectMapper();
     }
 
-    /**
-     * Answer a user question about device data.
-     * Takes an optional userToken for per-user device scoping.
-     */
     public ChatResponse answerQuestion(ChatRequest request, String userToken) {
         long startTime = System.currentTimeMillis();
-        log.info("📩 Processing question: '{}' (user token: {})",
-                request.getQuestion(), userToken != null ? "present" : "absent");
-
         try {
-            // Step 3.5: Fetch Session History (Moved UP so filter can use it)
             String sessionId = (userToken != null && !userToken.isBlank()) ? userToken : "default-session";
             List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history = chatMemoryService.getHistory(sessionId);
 
-            // Step 1: Get device data — JWT is REQUIRED
-            Map<String, Object> rawData;
             if (userToken == null || userToken.isBlank()) {
-                return ChatResponse.builder()
-                        .answer("Please log in to ThingsBoard first. I need your authentication token to access your device data.")
-                        .error(true)
-                        .errorMessage("No JWT token provided. Please log in.")
-                        .timestamp(System.currentTimeMillis())
-                        .build();
+                return ChatResponse.builder().answer("Please log in to ThingsBoard first.").error(true).build();
             }
-            // Debug: Show token in response only when debug logging is enabled
-            if (log.isDebugEnabled()) {
-                String tokenPreview = userToken.length() > 20 ? userToken.substring(0, 20) + "..." : userToken;
-                log.debug("Using JWT token: {}", tokenPreview);
-            }
+
             List<Map<String, Object>> allDevices = userDataService.getUserDevicesData(userToken);
-            rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history, sessionId);
-            log.debug("Got {} raw data keys", rawData.size());
+            Map<String, Object> rawData = filterDevicesForQuestion(allDevices, request.getQuestion(), history, sessionId);
 
-            // Step 2: Filter context to reduce tokens
             Map<String, Object> filteredData = ContextFilterUtil.filterAttributes(rawData);
-            log.debug("Filtered to {} keys", filteredData.size());
+            
+            // SECOND PASS: If context is still huge, keep ONLY keys relevant to the current question keywords
+            int estimateBefore = TokenCounterService.countMessageTokens(SYSTEM_PROMPT, history, request.getQuestion(), objectMapper.writeValueAsString(filteredData));
+            if (!TokenCounterService.fitsInContextWindow(estimateBefore)) {
+                log.info("⚠️ Context still too large ({} tokens). Applying keyword-based pruning...", estimateBefore);
+                Map<String, Object> prunedData = new HashMap<>();
+                String q = request.getQuestion().toLowerCase();
+                
+                // Always keep identity and operational status
+                for (Map.Entry<String, Object> entry : filteredData.entrySet()) {
+                    String k = entry.getKey().toLowerCase();
+                    if (k.contains("name") || k.contains("id") || k.contains("gateway") || k.contains("status") || k.contains("operational") || k.contains("unified_status") || k.contains("system_note")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("cctv") && k.contains("cctv")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("ias") && k.contains("ias")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("fas") && k.contains("fas")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("bas") && k.contains("bas")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if ((q.contains("tls") || q.contains("time")) && k.contains("timelock")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if ((q.contains("acs") || q.contains("access")) && k.contains("accesscontrol")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("battery") && k.contains("battery")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("alarm") && k.contains("alarm")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("voltage") && k.contains("voltage")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("cpu") && k.contains("cpu")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    } else if (q.contains("temperature") && k.contains("temperature")) {
+                        prunedData.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                filteredData = prunedData;
+            }
 
-            // Step 3: Convert to JSON string for the prompt
             String contextJson = objectMapper.writeValueAsString(filteredData);
 
-            // Step 4: Count tokens and validate (with history)
-            int totalTokens = TokenCounterService.countMessageTokens(
-                    SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
+            int totalTokens = TokenCounterService.countMessageTokens(SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
 
-            // If we exceed context block, discard history one by one until it fits
             while (!TokenCounterService.fitsInContextWindow(totalTokens) && !history.isEmpty()) {
                 chatMemoryService.removeOldestMessage(sessionId);
                 history = chatMemoryService.getHistory(sessionId);
-                totalTokens = TokenCounterService.countMessageTokens(
-                        SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
+                totalTokens = TokenCounterService.countMessageTokens(SYSTEM_PROMPT, history, request.getQuestion(), contextJson);
             }
 
             if (!TokenCounterService.fitsInContextWindow(totalTokens)) {
-                throw new ContextOverflowException(
-                        "Context too large: " + totalTokens + " tokens (max 6000). Try asking about a specific device.");
+                throw new ContextOverflowException("Context too large.");
             }
 
-            // Step 5: Build the user message with context
-            // Add query-type specific instructions to guide the AI
             String queryInstruction = detectQueryInstructions(request.getQuestion(), filteredData);
-            String userMessage = "Device Data Context:\n" + contextJson
-                    + "\n\n" + queryInstruction
-                    + "\n\nUser Question: " + request.getQuestion();
+            String userMessage = "Device Data Context:\n" + contextJson + "\n\n" + queryInstruction + "\n\nUser Question: " + request.getQuestion();
 
-            // Step 6: Call OpenAI with Context + History + New Question
             String answer = openAIClient.chat(SYSTEM_PROMPT, history, userMessage);
-
-            // Record this interaction into the sliding window memory
             chatMemoryService.recordInteraction(sessionId, request.getQuestion(), answer);
-
-            // Step 7: Generate chart if requested
-            ChartData chartData = null;
-            if (Boolean.TRUE.equals(request.getIncludeChart()) || isChartRequest(request.getQuestion())) {
-                String chartKey = detectChartKey(request.getQuestion(), filteredData);
-                if (chartKey != null) {
-                    String actualKey = chartKey;
-                    String deviceId = null;
-
-                    // If userToken is present and we have multiple devices, the key might be prefixed
-                    if (userToken != null && !userToken.isBlank()) {
-                        if (chartKey.contains(".")) {
-                            String deviceName = chartKey.substring(0, chartKey.lastIndexOf("."));
-                            actualKey = chartKey.substring(chartKey.lastIndexOf(".") + 1);
-                            Object devIdObj = filteredData.get(deviceName + ".device_id");
-                            if (devIdObj != null) deviceId = devIdObj.toString();
-                        } else {
-                            Object devIdObj = filteredData.get("device_id");
-                            if (devIdObj != null) deviceId = devIdObj.toString();
-                        }
-                    }
-
-                    chartData = chartService.generateChartData(userToken, deviceId, actualKey);
-                    log.info("📊 Chart generated for actual key: {}", actualKey);
-                }
-            }
-
-            long duration = System.currentTimeMillis() - startTime;
-            log.info("✅ Question answered in {}ms ({} tokens)", duration, totalTokens);
-
-            // Build a small summary context for the response
-            Map<String, Object> summaryContext = new LinkedHashMap<>();
-            // Only add basic overview items, not full arrays which clutters UI
-            for (Map.Entry<String, Object> entry : filteredData.entrySet()) {
-                if (entry.getKey().toLowerCase().contains("name") || entry.getKey().toLowerCase().contains("status")) {
-                    summaryContext.put(entry.getKey(), entry.getValue());
-                }
-            }
-            summaryContext.put("dataKeysUsed", filteredData.size());
 
             return ChatResponse.builder()
                     .answer(answer)
-                    .context(summaryContext)
-                    .chart(chartData)
                     .tokensUsed(totalTokens)
                     .timestamp(System.currentTimeMillis())
                     .error(false)
                     .build();
 
-        } catch (ContextOverflowException e) {
-            log.error("❌ Context overflow: {}", e.getMessage());
-            return ChatResponse.builder()
-                    .answer("I'm sorry, the device data is too large to process. "
-                            + "Please try a more specific question.")
-                    .error(true)
-                    .errorMessage(e.getMessage())
-                    .timestamp(System.currentTimeMillis())
-                    .build();
-
         } catch (Exception e) {
-            log.error("❌ Error answering question: {}", e.getMessage(), e);
-            return ChatResponse.builder()
-                    .answer("I encountered an error processing your question. Please try again.")
-                    .error(true)
-                    .errorMessage(e.getMessage())
-                    .timestamp(System.currentTimeMillis())
-                    .build();
+            log.error("❌ Error: {}", e.getMessage(), e);
+            return ChatResponse.builder().answer("I encountered an error. Please try again.").error(true).build();
         }
     }
 
-    /**
-     * Detect if the user's question is asking for a chart/graph/trend.
-     */
-    private boolean isChartRequest(String question) {
-        if (question == null) return false;
-        String lower = question.toLowerCase();
-        return lower.contains("chart") || lower.contains("graph")
-                || lower.contains("trend") || lower.contains("history")
-                || lower.contains("plot") || lower.contains("show me");
-    }
-
-    /**
-     * Detect which telemetry key to chart based on the question.
-     */
-    private String detectChartKey(String question, Map<String, Object> data) {
-        if (question == null) return null;
-        String lower = question.toLowerCase();
-
-        // Try to match question keywords to data keys
-        for (String key : data.keySet()) {
-            if (lower.contains(key.toLowerCase().replace("_", " "))
-                    || lower.contains(key.toLowerCase())) {
-                return key;
-            }
-        }
-
-        // Common keyword mappings
-        if (lower.contains("battery")) return findKeyContaining(data, "battery");
-        if (lower.contains("temperature") || lower.contains("temp")) return findKeyContaining(data, "temp");
-        if (lower.contains("humidity")) return findKeyContaining(data, "humidity");
-        if (lower.contains("cpu")) return findKeyContaining(data, "cpu");
-        if (lower.contains("memory") || lower.contains("ram")) return findKeyContaining(data, "memory");
-
-        return null;
-    }
-
-    private String findKeyContaining(Map<String, Object> data, String keyword) {
-        return data.keySet().stream()
-                .filter(k -> k.toLowerCase().contains(keyword))
-                .findFirst()
-                .orElse(null);
-    }
-
-    /**
-     * Detect query type and add specific instructions to guide the AI response.
-     * This helps ensure accurate answers for different types of questions.
-     */
     private String detectQueryInstructions(String question, Map<String, Object> data) {
-        if (question == null || question.isBlank()) {
-            return "";
-        }
-        
+        if (question == null || question.isBlank()) return "";
         String q = question.toLowerCase();
-        StringBuilder instructions = new StringBuilder();
-        
-        // Count queries - focus on gateway status
-        if (q.contains("how many") || q.contains("count") || q.contains("number of")) {
-            if (q.contains("offline") || q.contains("inactive") || q.contains("not working") || q.contains("down")) {
-                instructions.append("\nCRITICAL: Count only devices where gateway='Offline' or gwStatus='Offline'. ");
-                instructions.append("Do NOT count devices as offline just because subsystems show issues. ");
-                instructions.append("The gateway status is the definitive indicator. ");
-            } else if (q.contains("online") || q.contains("active") || q.contains("working")) {
-                instructions.append("\nCRITICAL: Count only devices where gateway='Online' or gwStatus='Online'. ");
-            }
+        StringBuilder instr = new StringBuilder();
+        if (q.contains("how many") || q.contains("which") || q.contains("what")) {
+            instr.append("\nCRITICAL: You must account for every branch. If OPERATIONAL is False, the branch is Offline. Do not list offline branches as Online.");
         }
-        
-        // Which queries - list specific devices
-        if (q.contains("which") || q.contains("list")) {
-            if (q.contains("offline") || q.contains("inactive") || q.contains("not working")) {
-                instructions.append("\nList the specific device/branch names that have gateway='Offline' or gwStatus='Offline'. ");
-            } else if (q.contains("battery") || q.contains("alarm")) {
-                instructions.append("\nList each device with its specific value (e.g., 'BOI-DANKUNI: OK, BOI-CHANDANNAGAR: Low'). ");
-            }
-        }
-        
-        // Status queries - provide clear yes/no
-        if (q.contains("is there") || q.contains("are there") || q.contains("does") || q.contains("do any")) {
-            instructions.append("\nAnswer with a clear yes/no followed by specific examples if applicable. ");
-        }
-        
-        // Battery/power queries
-        if (q.contains("battery") || q.contains("power") || q.contains("mains")) {
-            instructions.append("\nHighlight any devices with 'Low', 'Critical', or 'Reverse' battery status. ");
-        }
-        
-        // Alarm queries
-        if (q.contains("alarm") || q.contains("alert")) {
-            instructions.append("\nList devices with alarmCount > 0 and mention the alarm count. ");
-        }
-        
-        return instructions.toString();
+        return instr.toString();
     }
 
-    /**
-     * Filters a list of user devices based on whether the device name 
-     * is mentioned in the current question AND/OR previous conversational history.
-     */
     private Map<String, Object> filterDevicesForQuestion(List<Map<String, Object>> allDevices, String question, List<com.seple.ThingsBoard_Bot.model.dto.ChatMessage> history, String sessionId) {
-        if (allDevices == null || allDevices.isEmpty()) {
-            return new HashMap<>();
-        }
+        if (allDevices == null || allDevices.isEmpty()) return new HashMap<>();
         
-        // Build a combined 'contextual text' wall from the current question + past questions
         StringBuilder contextText = new StringBuilder();
-        if (question != null) {
-            contextText.append(question.toLowerCase()).append(" ");
-        }
+        if (question != null) contextText.append(question.toLowerCase()).append(" ");
         if (history != null) {
             for (com.seple.ThingsBoard_Bot.model.dto.ChatMessage msg : history) {
-                // Scan both user questions AND bot responses. 
-                // If the bot says "CHINSURAH is inactive", we want to capture CHINSURAH as the active context!
-                if (msg.getContent() != null) {
-                    contextText.append(msg.getContent().toLowerCase()).append(" ");
-                }
+                if (msg.getContent() != null) contextText.append(msg.getContent().toLowerCase()).append(" ");
             }
         }
         String qLower = contextText.toString();
         
-        List<Map<String, Object>> matchedDevices = new ArrayList<>();
-        
+        Map<String, Map<String, Object>> uniqueMatchedDevices = new LinkedHashMap<>();
         for (Map<String, Object> dev : allDevices) {
-            String name = (String) dev.getOrDefault("device_name", "");
-            // Also check branchName and customerTitle for matching
-            String branchName = (String) dev.getOrDefault("branchName", "");
-            String customerTitle = (String) dev.getOrDefault("customerTitle", "");
+            String name = String.valueOf(dev.getOrDefault("device_name", "")).toLowerCase();
+            String branch = String.valueOf(dev.getOrDefault("branchName", "")).toLowerCase();
+            String id = String.valueOf(dev.getOrDefault("device_id", ""));
             
-            if (!name.isEmpty()) {
-                String nameLower = name.toLowerCase();
-                String strippedName = nameLower.contains("-") ? nameLower.substring(nameLower.indexOf("-") + 1) : nameLower;
-                String branchLower = branchName.toLowerCase();
-                String customerLower = customerTitle.toLowerCase();
-                
-                // Match against device name, stripped name (after -), branch name, or customer title
-                if (qLower.contains(nameLower) || (strippedName.length() >= 3 && qLower.contains(strippedName))
-                    || (!branchLower.isEmpty() && qLower.contains(branchLower))
-                    || (!customerLower.isEmpty() && qLower.contains(customerLower))) {
-                    matchedDevices.add(dev);
-                }
+            String strippedName = name.replace("-", "").replace(" ", "");
+            String strippedBranch = branch.replace("-", "").replace(" ", "");
+            String strippedQ = qLower.replace("-", "").replace(" ", "");
+            
+            if (qLower.contains(name) || qLower.contains(branch) 
+                || (strippedName.length() > 3 && strippedQ.contains(strippedName))
+                || (strippedBranch.length() > 3 && strippedQ.contains(strippedBranch))) {
+                uniqueMatchedDevices.put(id, dev);
             }
         }
         
-        Map<String, Object> flat = new HashMap<>();
+        List<Map<String, Object>> matchedDevices = new ArrayList<>(uniqueMatchedDevices.values());
         
-        boolean isGlobalQuery = false;
-        if (question != null) {
-            String currentQ = question.toLowerCase();
-            isGlobalQuery = currentQ.contains("all") || currentQ.contains("any") 
-                            || currentQ.contains("which") || currentQ.contains("my devices")
-                            || currentQ.contains("what") || currentQ.contains("how many")
-                            || currentQ.contains("list") || currentQ.contains("overview")
-                            || currentQ.contains("branches");
-        }
-        
-        // 1. If it's a generic overview query, send a highly summarized device list.
-        // This overrides any specific matched devices because the user is zooming out.
-        if (isGlobalQuery) {
-            chatMemoryService.setActiveDevices(sessionId, new ArrayList<>()); // clear active zoom
-            flat = flattenDeviceSummary(allDevices);
-            flat.put("SYSTEM_NOTE", "The user asked a general/overview question across all their branches. A summary of all branches is provided. Answer based on this data. For questions about specific branch details, please ask about a specific branch name.");
-        } 
-        // 2. If matched specific devices, tightly bound how many we expand.
-        else if (!matchedDevices.isEmpty()) {
-            List<String> activeNames = new ArrayList<>();
-            for (Map<String, Object> md : matchedDevices) {
-                activeNames.add((String) md.getOrDefault("device_name", ""));
-            }
-            chatMemoryService.setActiveDevices(sessionId, activeNames);
-            
-            // ALWAYS use full data for specific device queries (1-5 matched)
-            // For larger sets, use summary to prevent token overflow
-            if (matchedDevices.size() <= 5) {
-                flat = flattenDeviceList(matchedDevices); // Safe to fully expand
-            } else {
-                // Too many to expand safely - use summary
-                flat = flattenDeviceSummary(matchedDevices);
-                flat.put("SYSTEM_NOTE", "Multiple branches matched the context (" + matchedDevices.size() + "). A lightweight summary of these branches is provided to save tokens. If detailed telemetry is needed for a specific branch, ask the user to specify just one.");
-            }
-        } 
-        // 3. If no match but less than 6 devices total, use all (small enough context).
-        else if (allDevices.size() <= 5) {
-            flat = flattenDeviceList(allDevices);
-        } 
-        // 4. Fallback: Check if we have active devices stored in the session memory
-        else {
-            List<String> activeSessionDevices = chatMemoryService.getActiveDevices(sessionId);
-            if (!activeSessionDevices.isEmpty()) {
-                List<Map<String, Object>> sessionMatched = new ArrayList<>();
-                for (Map<String, Object> dev : allDevices) {
-                    if (activeSessionDevices.contains((String) dev.getOrDefault("device_name", ""))) {
-                        sessionMatched.add(dev);
-                    }
-                }
-                if (!sessionMatched.isEmpty()) {
-                    if (sessionMatched.size() <= 5) {
-                        flat = flattenDeviceList(sessionMatched);
-                    } else {
-                        flat = flattenDeviceSummary(sessionMatched);
-                        flat.put("SYSTEM_NOTE", "Multiple branches matched the context from previous session (" + sessionMatched.size() + "). A lightweight summary is provided to save tokens. Ask the user to specify one if they need full telemetry.");
-                    }
-                    return flat;
-                }
-            }
+        boolean isGlobal = question != null && (qLower.contains("all") || qLower.contains("any") || qLower.contains("which") || qLower.contains("list") || qLower.contains("branches") || qLower.contains("devices") || qLower.contains("have"));
 
-            // 5. Still no match? Force the user to specify.
-            flat.put("SYSTEM_NOTE", "CRITICAL INSTRUCTION: There are too many branches (" + allDevices.size() + ") to show full telemetry for at once, and the user didn't specify one. You MUST reply by asking the user to specify which branch they want to check (for example, refer to the available_devices_for_user_to_choose_from list). Do NOT say you don't have access to the data.");
-            List<String> names = new ArrayList<>();
+        Map<String, Object> flat;
+        if (isGlobal) {
+            chatMemoryService.setActiveDevices(sessionId, new ArrayList<>());
+            flat = flattenDeviceSummary(allDevices);
+        } else if (!matchedDevices.isEmpty()) {
+            List<String> activeNames = new ArrayList<>();
+            for (Map<String, Object> md : matchedDevices) activeNames.add(getBestName(md));
+            chatMemoryService.setActiveDevices(sessionId, activeNames);
+            flat = matchedDevices.size() <= 5 ? flattenDeviceList(matchedDevices) : flattenDeviceSummary(matchedDevices);
+        } else {
+            List<Map<String, Object>> sessionMatched = new ArrayList<>();
+            List<String> activeSessionDevices = chatMemoryService.getActiveDevices(sessionId);
             for (Map<String, Object> dev : allDevices) {
-                names.add((String) dev.getOrDefault("branchName", "Unknown"));
+                if (activeSessionDevices.contains(getBestName(dev))) sessionMatched.add(dev);
             }
-            flat.put("available_devices_for_user_to_choose_from", names);
+            if (!sessionMatched.isEmpty()) {
+                flat = sessionMatched.size() <= 5 ? flattenDeviceList(sessionMatched) : flattenDeviceSummary(sessionMatched);
+            } else {
+                flat = new HashMap<>();
+                List<String> names = new ArrayList<>();
+                for (Map<String, Object> dev : allDevices) names.add(getBestName(dev));
+                flat.put("available_branches", names);
+                flat.put("SYSTEM_NOTE", "Ask user to specify a branch name.");
+                return flat;
+            }
+        }
+
+        // --- INJECT SYSTEM NOTE WITH CALCULATED COUNTS ---
+        if (isGlobal) {
+            int online = 0;
+            int offline = 0;
+            for (Map<String, Object> dev : allDevices) {
+                String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
+                String s = String.valueOf(dev.getOrDefault("status", "N/A"));
+                if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) {
+                    online++;
+                } else {
+                    offline++;
+                }
+            }
+            flat.put("SYSTEM_NOTE", String.format("MANDATORY: There are exactly %d Online and %d Offline branches. Your header MUST say 'Total: %d Online | %d Offline'. Do not use any other numbers.", online, offline, online, offline));
         }
         
         return flat;
     }
 
-    /**
-     * Flattens a list of devices into a single map context.
-     * Prefixes properties with device names if there are multiple devices.
-     */
+    private String getBestName(Map<String, Object> dev) {
+        Object bName = dev.get("branchName");
+        if (bName != null && !bName.toString().isBlank() && !"unknown".equalsIgnoreCase(bName.toString())) {
+            String name = bName.toString();
+            // Clean names like "BOI-R-BAZAR" to "R-BAZAR" if requested
+            if (name.startsWith("BRANCH ")) return name;
+            return name;
+        }
+        return String.valueOf(dev.getOrDefault("device_name", "Unknown Branch"));
+    }
+
     private Map<String, Object> flattenDeviceList(List<Map<String, Object>> devices) {
         Map<String, Object> flat = new HashMap<>();
         if (devices.size() == 1) {
             flat.putAll(devices.get(0));
         } else {
-            flat.put("total_devices_in_context", devices.size());
-            for (Map<String, Object> deviceData : devices) {
-                String name = deviceData.getOrDefault("branchName", "unknown").toString();
-                for (Map.Entry<String, Object> entry : deviceData.entrySet()) {
-                    flat.put(name + "." + entry.getKey(), entry.getValue());
-                }
+            for (Map<String, Object> dev : devices) {
+                String name = getBestName(dev);
+                for (Map.Entry<String, Object> entry : dev.entrySet()) flat.put(name + "." + entry.getKey(), entry.getValue());
             }
         }
         return flat;
     }
 
-    /**
-     * Creates an EXTREMELY lightweight summary of all devices for global questions.
-     * This ensures 10-20+ devices can fit into a single context window without loss.
-     */
     private Map<String, Object> flattenDeviceSummary(List<Map<String, Object>> devices) {
         Map<String, Object> summary = new HashMap<>();
         summary.put("total_devices", devices.size());
         for (Map<String, Object> dev : devices) {
-            String name = dev.getOrDefault("branchName", "unknown").toString();
+            String name = getBestName(dev);
+            String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
+            String s = String.valueOf(dev.getOrDefault("status", "N/A"));
             
-            // Critical keys for accuracy
-            summary.put(name + ".gateway", dev.getOrDefault("gateway", "N/A"));
-            if (dev.containsKey("status")) summary.put(name + ".status", dev.get("status"));
-            if (dev.containsKey("active")) summary.put(name + ".active", dev.get("active"));
-            if (dev.containsKey("gwHealth")) summary.put(name + ".gwHealth", dev.get("gwHealth"));
-            if (dev.containsKey("ias")) summary.put(name + ".ias", dev.get("ias"));
-            if (dev.containsKey("cctv")) summary.put(name + ".cctv", dev.get("cctv"));
+            String unifiedStatus = String.format("Gateway: %s, Status: %s", g, s);
+            summary.put(name + ".unified_status", unifiedStatus);
             
-            // Add a definitive Offline flag for the AI
-            String g = String.valueOf(dev.get("gateway"));
-            String s = String.valueOf(dev.get("status"));
             if ("Offline".equalsIgnoreCase(g) || "Fault".equalsIgnoreCase(g) || "N/A".equalsIgnoreCase(g) || "Inactive".equalsIgnoreCase(s)) {
                 summary.put(name + ".OPERATIONAL", "False");
+            } else {
+                summary.put(name + ".OPERATIONAL", "True");
             }
         }
         return summary;
     }
-    
-    /**
-     * Convert epoch milliseconds to human-readable date/time format.
-     * Returns the original value if it's not a valid epoch timestamp.
-     */
-    private Object formatTimestamp(Object value) {
-        if (value == null) {
-            return null;
-        }
-        
-        try {
-            // Try to parse as Long (epoch milliseconds)
-            long timestamp;
-            if (value instanceof Number) {
-                timestamp = ((Number) value).longValue();
-            } else {
-                String strValue = value.toString().trim();
-                // Check if it looks like an epoch timestamp (13+ digits for milliseconds)
-                if (!strValue.matches("\\d{13,}")) {
-                    return value; // Not a timestamp
-                }
-                timestamp = Long.parseLong(strValue);
-            }
-            
-            // Validate it's a reasonable timestamp (between 2000 and 2100)
-            if (timestamp < 946684800000L || timestamp > 4102444800000L) {
-                return value; // Outside reasonable range
-            }
-            
-            // Format to human-readable
-            SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy, HH:mm:ss");
-            sdf.setTimeZone(TimeZone.getTimeZone("IST")); // India Standard Time
-            return sdf.format(new java.util.Date(timestamp));
-        } catch (Exception e) {
-            log.debug("Failed to format timestamp: {}", value, e);
-            return value; // Return original on any error
-        }
-    }
 
-    /**
-     * Pre-fetch and cache user device data.
-     * Useful for hitting silently on login to eliminate the "cold start" delay.
-     */
     public void initializeUserCache(String userToken) {
         if (userToken != null && !userToken.isBlank()) {
-            log.info("⚡ Pre-fetching user device data for instant chat responses...");
             userDataService.getUserDevicesData(userToken);
-        } else {
-            log.warn("Cannot initialize cache: No user token provided.");
         }
     }
 }
