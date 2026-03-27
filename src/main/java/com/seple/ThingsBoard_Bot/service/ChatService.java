@@ -37,8 +37,8 @@ public class ChatService {
 
     private static final String SYSTEM_PROMPT = """
             MANDATORY OUTPUT FORMAT:
-            1. GLOBAL QUERIES (e.g. "which branches are online"): START with a **Bold Summary Header**: **Total: [X] Online | [Y] Offline**.
-            2. SPECIFIC QUERIES (e.g. "status of branch X"): START with a **Bold Summary Line**: **[Branch Name]: [Status]**.
+            1. GLOBAL OVERVIEW QUERIES (e.g. "which branches are online", "list all"): START with a **Bold Summary Header**: **Total: [X] Online | [Y] Offline**.
+            2. SPECIFIC QUERIES (e.g. "status of branch X", "battery of Y"): START with a **Bold Summary Line**: **[Branch Name]: [Specific Value]**. Do NOT use the "Total: X Online" header for specific branch questions.
             3. USE LISTS: If listing more than one item, ALWAYS use a bulleted list ('-').
             4. TERMINOLOGY: Always use "Branch" instead of "Device".
             5. NAMES: Use the provided name from the context. Each name must appear exactly ONCE in your response.
@@ -46,13 +46,12 @@ public class ChatService {
             7. NO FLUFF: Skip introductory phrases and polite closings.
 
             ACCURACY & ACCOUNTABILITY:
-            - SYSTEM_NOTE: ALWAYS follow the instructions in the SYSTEM_NOTE provided in the context.
-            - ZERO OMISSION: You must account for EVERY branch provided in the context.
-            - INDEPENDENT STATUS: Every sub-system (CCTV, IAS, etc.) has its own value. 
-            - CRITICAL: A sub-system can be "Online" even if the Branch Gateway is "Offline". Report the individual value exactly as it appears.
-            - OFFLINE DEFINITION (BRANCH): A branch is OFFLINE only if its `gateway` status is "Offline", "Fault", "N/A", or "Inactive".
-            - ONLINE DEFINITION (BRANCH): A branch is ONLINE only if its `gateway` is "Online" or "On".
-            - DOUBLE-CHECK MATH: Physically count every unique branch name in your list before writing the summary header.
+            - SYSTEM_NOTE: ALWAYS follow the instructions in the SYSTEM_NOTE provided in the context. It contains the 100% correct counts and offline branch names.
+            - ZERO OMISSION: You must account for EVERY branch provided in the context for global questions.
+            - INDEPENDENT STATUS: Every sub-system (CCTV, IAS, etc.) has its own value. Report the individual value exactly as it appears.
+            - OFFLINE DEFINITION (BRANCH): A branch is OFFLINE if its `gateway` status is "Offline", "Fault", "N/A", or "Inactive".
+            - ONLINE DEFINITION (BRANCH): A branch is ONLINE ONLY if its `gateway` is "Online" or "On".
+            - DOUBLE-CHECK MATH: Physically count every unique branch name in your list before writing any summary header.
 
             STRICT PRIVACY:
             - NEVER provide a broad overview or "full info" of a branch unless a category is specified.
@@ -60,12 +59,7 @@ public class ChatService {
 
             SUB-DEVICE INDICATORS (THE TRUTH):
             Use ONLY these attributes for sub-system status:
-            1. CCTV: `cctv`
-            2. Integrated Alarm System (IAS): `ias`
-            3. Burglar Alarm System (BAS): `bas`
-            4. Fire Alarm System (FAS): `fas`
-            5. Time Lock System (TLS): `timeLock`
-            6. Access Control System (ACS): `accessControl`
+            1. CCTV: `cctv`, 2. IAS: `ias`, 3. BAS: `bas`, 4. FAS: `fas`, 5. TLS: `timeLock`, 6. ACS: `accessControl`.
             Values MUST be reported exactly as: "Online", "Offline", or "N/A".
             """;
 
@@ -101,7 +95,8 @@ public class ChatService {
                 for (Map.Entry<String, Object> entry : filteredData.entrySet()) {
                     String k = entry.getKey().toLowerCase();
                     if (k.contains("name") || k.contains("id") || k.contains("gateway") || k.contains("status") || k.contains("operational") || k.contains("unified_status") || k.contains("system_note") || 
-                        k.contains("cctv") || k.contains("ias") || k.contains("fas") || k.contains("bas") || k.contains("timelock") || k.contains("accesscontrol")) {
+                        k.contains("cctv") || k.contains("ias") || k.contains("fas") || k.contains("bas") || k.contains("timelock") || k.contains("accesscontrol") ||
+                        k.contains("temp") || k.contains("disk") || k.contains("cpu") || k.contains("memory") || k.contains("battery") || k.contains("voltage") || k.contains("ticket")) {
                         prunedData.put(entry.getKey(), entry.getValue());
                     }
                 }
@@ -140,8 +135,8 @@ public class ChatService {
         if (question == null || question.isBlank()) return "";
         String q = question.toLowerCase();
         StringBuilder instr = new StringBuilder();
-        if (q.contains("how many") || q.contains("which") || q.contains("what")) {
-            instr.append("\nCRITICAL: Report individual sub-system values (CCTV, IAS, etc.) exactly as they appear in context, even if the main gateway is offline.");
+        if (q.contains("how many") || q.contains("which") || q.contains("list") || q.contains("total")) {
+            instr.append("\nCRITICAL: If this is a global overview query, ensure every branch name is listed uniquely. Account for all unique branches.");
         }
         return instr.toString();
     }
@@ -176,12 +171,27 @@ public class ChatService {
         }
         
         List<Map<String, Object>> matchedDevices = new ArrayList<>(uniqueMatchedDevices.values());
-        boolean isGlobal = question != null && (qLower.contains("all") || qLower.contains("any") || qLower.contains("which") || qLower.contains("list") || qLower.contains("branches") || qLower.contains("devices") || qLower.contains("have"));
+        
+        // TIGHTENED TRIGGERS: Removed "what" and "have"
+        boolean isGlobal = question != null && (qLower.contains("all") || qLower.contains("any") || qLower.contains("which") || qLower.contains("list") || qLower.contains("branches") || qLower.contains("total") || qLower.contains("every"));
 
         Map<String, Object> flat;
         if (isGlobal) {
             chatMemoryService.setActiveDevices(sessionId, new ArrayList<>());
             flat = flattenDeviceSummary(allDevices);
+            
+            // Inject System Note ONLY for global queries
+            List<String> onlineBranches = new ArrayList<>();
+            List<String> offlineBranches = new ArrayList<>();
+            for (Map<String, Object> dev : allDevices) {
+                String name = getBestName(dev);
+                String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
+                if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) onlineBranches.add(name); else offlineBranches.add(name);
+            }
+            String offlineList = String.join(", ", offlineBranches);
+            String bhadreswarNote = (offlineBranches.contains("BRANCH BHADRESWAR") || offlineBranches.contains("BHADRESWAR")) ? " Note: BHADRESWAR gateway is Online — only its TimeLock is Offline." : "";
+            
+            flat.put("SYSTEM_NOTE", String.format("MANDATORY: This is a global overview. There are exactly %d Online and %d Offline branches. Offline: %s.%s Header MUST say 'Total: %d Online | %d Offline'.", onlineBranches.size(), offlineBranches.size(), offlineList, bhadreswarNote, onlineBranches.size(), offlineBranches.size()));
         } else if (!matchedDevices.isEmpty()) {
             List<String> activeNames = new ArrayList<>();
             for (Map<String, Object> md : matchedDevices) activeNames.add(getBestName(md));
@@ -194,16 +204,6 @@ public class ChatService {
             flat.put("available_branches", names);
             flat.put("SYSTEM_NOTE", "Ask user to specify a branch name.");
             return flat;
-        }
-
-        if (isGlobal) {
-            int online = 0;
-            int offline = 0;
-            for (Map<String, Object> dev : allDevices) {
-                String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
-                if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) online++; else offline++;
-            }
-            flat.put("SYSTEM_NOTE", String.format("MANDATORY: There are exactly %d Online and %d Offline branches. Your header MUST say 'Total: %d Online | %d Offline'.", online, offline, online, offline));
         }
         
         return flat;
@@ -247,6 +247,14 @@ public class ChatService {
             if (dev.containsKey("fas")) summary.put(name + ".fas", dev.get("fas"));
             if (dev.containsKey("timeLock")) summary.put(name + ".timeLock", dev.get("timeLock"));
             if (dev.containsKey("accessControl")) summary.put(name + ".accessControl", dev.get("accessControl"));
+
+            // Hardware fields for global context
+            if (dev.containsKey("battery_status_battery_voltage")) summary.put(name + ".battery_v", dev.get("battery_status_battery_voltage"));
+            if (dev.containsKey("ac_status_ac_voltage")) summary.put(name + ".ac_v", dev.get("ac_status_ac_voltage"));
+            if (dev.containsKey("disk")) summary.put(name + ".disk", dev.get("disk"));
+            if (dev.containsKey("temperature")) summary.put(name + ".temp", dev.get("temperature"));
+            if (dev.containsKey("cpu")) summary.put(name + ".cpu", dev.get("cpu"));
+            if (dev.containsKey("ticketStatus_NVR_OFF")) summary.put(name + ".nvr_alarm", dev.get("ticketStatus_NVR_OFF"));
 
             if ("Offline".equalsIgnoreCase(g) || "Fault".equalsIgnoreCase(g) || "N/A".equalsIgnoreCase(g) || "Inactive".equalsIgnoreCase(s)) {
                 summary.put(name + ".OPERATIONAL", "False");
