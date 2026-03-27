@@ -34,3 +34,12 @@ build/
 
 ### Custom ###
 application-dev.properties
+
+### Local Data & Logs ###
+device_data.json
+full_data.json
+test_data.json
+user.json
+conversasion.text
+push_error.txt
+*.log
