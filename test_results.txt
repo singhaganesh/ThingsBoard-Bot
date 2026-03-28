@@ -1,0 +1,45 @@
+============================================================
+BOT TEST RESULTS & FIXES
+============================================================
+
+TEST DATE: March 28, 2026
+DATA SOURCE: full_data.json
+TOKEN LIMIT: 10,000
+
+------------------------------------------------------------
+ERROR 1: INCONSISTENT COUNTS & MISSING BRANCHES
+------------------------------------------------------------
+QUESTION: "Which branches are currently online?"
+BOT RESPONSE: "Total: 8 Online | 1 Offline"
+ACTUAL DATA: 10 Online | 1 Offline
+WRONG ANSWER: The bot missed DOBSON LANE and LILUAH entirely. 
+WHY: The AI tried to count manually from a large context and failed.
+FIX: Calculate counts in ChatService.java and inject via SYSTEM_NOTE.
+
+------------------------------------------------------------
+ERROR 2: SUB-SYSTEM STATUS HALLUCINATION
+------------------------------------------------------------
+QUESTION: "What is the time lock status of BHADRESWAR?"
+BOT RESPONSE: "On" (Turn 12) vs "Offline" (Turn 9)
+ACTUAL DATA: timeLockHealth = "Healthy" (from full_data.json L1342)
+WRONG ANSWER: The bot contradicted itself across different turns.
+WHY: The "Strict Specificity" rule was confusing the AI's memory.
+FIX: Normalize all "Healthy/On" values to "Online" before the AI sees them.
+
+------------------------------------------------------------
+ERROR 3: NAMING & OFFLINE MAPPING
+------------------------------------------------------------
+QUESTION: "Are all my devices online right now?"
+BOT RESPONSE: "BOI-R-BAZAR: Offline"
+WRONG ANSWER: The bot used the technical ID instead of a clean name.
+WHY: getBestName fallback logic wasn't handling devices missing branchName correctly.
+FIX: Update getBestName() to strip "BOI-" prefix and capitalize fallbacks.
+
+------------------------------------------------------------
+PROPOSED ARCHITECTURAL FIXES:
+------------------------------------------------------------
+1. Update SYSTEM_PROMPT to prioritize SYSTEM_NOTE counts.
+2. Update flattenDeviceSummary to calculate counts in Java.
+3. Update ContextFilterUtil to map "Healthy" to "Online" for sub-systems.
+4. Refine isGlobal query detection to include "devices" keyword.
+============================================================

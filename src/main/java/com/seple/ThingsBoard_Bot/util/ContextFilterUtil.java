@@ -149,11 +149,20 @@ public class ContextFilterUtil {
 
             // Keep if explicitly important
             if (IMPORTANT_KEYS.contains(actualKey) || IMPORTANT_KEYS.contains(fullKey)) {
+                Object finalValue = value;
                 String valueStr = String.valueOf(value);
+                
+                // --- VALUE NORMALIZATION: Standardize "Healthy/On" to "Online" ---
+                if ("Healthy".equalsIgnoreCase(valueStr) || "On".equalsIgnoreCase(valueStr)) {
+                    finalValue = "Online";
+                } else if ("Fault".equalsIgnoreCase(valueStr)) {
+                    finalValue = "Offline";
+                }
+
                 if (isTooLarge(valueStr) && !actualKey.equals("SYSTEM_NOTE") && !actualKey.equals("available_devices_for_user_to_choose_from")) {
-                    filtered.put(finalKey, simplifyValue(valueStr));
+                    filtered.put(finalKey, simplifyValue(String.valueOf(finalValue)));
                 } else {
-                    filtered.put(finalKey, value);
+                    filtered.put(finalKey, finalValue);
                 }
                 continue;
             }
