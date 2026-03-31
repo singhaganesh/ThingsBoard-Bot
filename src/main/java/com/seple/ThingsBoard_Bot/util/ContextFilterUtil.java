@@ -1,130 +1,52 @@
 package com.seple.ThingsBoard_Bot.util;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
+import java.util.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Filters device attributes to reduce token count before sending to OpenAI.
- * <p>
- * Raw device data can have ~200+ keys and ~17,000 tokens.
- * After filtering, we keep ~20-30 relevant keys and ~3,000-4,000 tokens.
- * </p>
+ * Advanced Context Filter - Synchronized with Branch System Q&A Guide.
  */
 @Slf4j
 public class ContextFilterUtil {
 
-    // Maximum allowed length for a single attribute value
-    private static final int MAX_VALUE_LENGTH = 300;
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Keys to ALWAYS keep (most useful for chatbot Q&A)
-    private static final Set<String> IMPORTANT_KEYS = Set.of(
-            // Device identity
-            "deviceName", "branchName", "customer_title", "zoName", "nbgName", "branch_id",
-            "deviceType", "gateway",
-
-            // System status
-            "active", "status", "gwHealth", "gwStatus", "system_status",
-            "SYSTEM ON", "MAINS ON", "BATTERY ON", "BATTERY LOW", "BATTERY REVERSE",
-            "NETWORK", "POWER OFF",
-
-            // Battery & power
-            "battery_status", "ac_status", "current_status",
-
-            // Subsystem health/status
-            "iasHealth", "iasStatus", "iasSystem", "ias", "iasUptime",
-            "cctvStatus", "cctvUptime", "cctv", "hddStatus", "nvrStatus",
-            "fasHealth", "fasStatus", "fas", "fasSystem",
-            "integratedStatus", "integratedType",
-            "basHealth", "basStatus", "bas", "basSystem",
-            "timeLockHealth", "timeLock",
-            "accessControlHealth", "accessControl", "accessControlStatus",
-            "cameraLinkStatus", "gatewayStatus", "cameraStatus", "hikvision_camera_status", "dahua_camera_status",
-
-            // Alarms
-            "alarmCount", "severity", "alerts", "errorCount",
-            "CAMERA DISCONNECT", "CAMERA TAMPER", "HDD ERROR",
-            "INTEGRATED ALARM SYSTEM FAULT", "DVR/NVR OFF",
-
-            // Location
-            "lat", "lon", "lat1", "lon1",
-
-            // Hardware info
-            "cpu", "memory", "disk", "temperature", "frequency",
-            "net_sent_mb", "net_recv_mb",
-            "Hikvision_NVR_model", "Hikvision_NVR_deviceName", "Hikvision_NVR_Heartbeat",
-            "DahuaNVR_Heartbeat",
-
-            // Timestamps
-            "timestamp", "time", "date",
-
-            // Uptime
-            "uptimeTotal", "uptimeHeartbeat", "gatewayUptime",
-
-            // Connectivity & Activity
-            "lastActivityTime", "lastConnectTime", "lastDisconnectTime",
-            "lastHeartbeat", "lastTelemetryTime", "lastUpdated",
-
-            // Counts
-            "iasLastHour", "cctvLastHour", "fasLastHour", "gatewayLastHour",
-            "IASinactiveCOUNT", "IASfaultCOUNT",
-
-            // ChatBot Internal Flags
-            "SYSTEM_NOTE", "available_devices_for_user_to_choose_from"
+    private static final Set<String> IDENTITY_FIELDS = Set.of(
+            "deviceName", "branchName", "branch_id", "deviceType", "gateway", "active", "status", "formattedBranchName"
     );
 
-    // Suffixes of keys to always skip
-    private static final Set<String> SKIP_SUFFIXES = Set.of(
-            "_history"
+    private static final Set<String> SUB_SYSTEM_FIELDS = Set.of(
+            "cctv", "ias", "bas", "fas", "timeLock", "accessControl",
+            "cctvStatus", "iasStatus", "basStatus", "fireAlarmStatus", "fasStatus",
+            "timeLockHealth", "accessControlStatus", "cameraLinkStatus", "tlStatus", "ias_status"
     );
 
-    // Prefixes of keys to always skip
-    private static final Set<String> SKIP_PREFIXES = Set.of(
-            "fw_", "sw_", "$", "provision", "target",
-            "cameraTamperCH", "cameraDisconnectCH",
-            "arrLat", "arrLon", "TotalLat", "TotalLon"
+    private static final Set<String> HARDWARE_FIELDS = Set.of(
+            "cpu", "memory", "disk", "temperature", "battery_status_battery_voltage", 
+            "ac_status_ac_voltage", "current_status_system_current", "gatewayStatus_battery_voltage",
+            "battery_voltage", "ac_voltage"
     );
 
-    // Exact keys to always skip
-    private static final Set<String> SKIP_KEYS = Set.of(
-            "fetched_at", "id", "undefined", "notification", "care",
-            "log_type", "alarmFlag", "attribute",
-            "rock", "rockAI", "dexter_config",
-            "rpi_usage", "rpi_alert", "usage_history",
-            "Total_Data_Usage", "usage_daily", "usage_last_7_days", "usage_last_15_days",
-            "watchdog_log", "lowDurationCameras",
-            "imei_id", "cavlidata_ontime",
-            "hikvision_ntp", "HiksyncTimeDate",
-            "Hikvision_NVR_serialNumber", "Hikvision_NVR_macAddress",
-            "Hikvision_NVR_firmwareVersion", "Hikvision_NVR_hardwareVersion",
-            "Hikvision_NVR_Processor", "Hikvision_NVR_deviceID",
-            "Hikvision_NVR_HDDInfo", "Hikvision_NVR_CameraRecInfo",
-            "Hikvision_NVR_cameraInfo", "Hikvision_NVR_Date", "Hikvision_NVR_Time",
-            "Hikvision_NVR_Manufacturer", "Hikvision_NVR_deviceType",
-            "Hik_SD_card_info", "Hik_SD_card_rec_info_list",
-            "integrated_alarm_fault_last", "integrated_alarm_off_last",
-            "integrated_alarm_activate_last", "Nvr_DVR_last", "dvr_nvr_off",
-            "gatewayType", "nvrType", "type"
+    private static final Set<String> ALARM_FIELDS = Set.of(
+            "alarmCount", "errorCount", "HDD ERROR", "INTRUSION ALARM SYSTEM ACTIVATE",
+            "FIRE ALARM SYSTEM ACTIVATE", "BATTERY LOW", "POWER OFF", "ticketStatus_NVR_OFF",
+            "TIME LOCK SYSTEM OFF", "DVR/NVR OFF"
     );
 
-    /**
-     * Filter raw device attributes to keep only relevant data for the chatbot.
-     */
+    private static final Set<String> COMPLEX_FIELDS = Set.of(
+            "rock_CAMERAdETAILS", "rock_HddINFO", "battery_status", "ac_status", "Dahua_SD_card_info", "rock_VIDEOdETAILS"
+    );
+
     public static Map<String, Object> filterAttributes(Map<String, Object> rawData) {
-        if (rawData == null || rawData.isEmpty()) {
-            return new HashMap<>();
-        }
-
-        int originalSize = rawData.size();
+        if (rawData == null || rawData.isEmpty()) return new HashMap<>();
         Map<String, Object> filtered = new HashMap<>();
 
         for (Map.Entry<String, Object> entry : rawData.entrySet()) {
             String fullKey = entry.getKey();
             Object value = entry.getValue();
 
-            // Extract the actual key if it's prefixed with deviceName.
             String actualKey = fullKey;
             String prefix = "";
             if (fullKey.contains(".")) {
@@ -132,97 +54,73 @@ public class ContextFilterUtil {
                 actualKey = fullKey.substring(fullKey.lastIndexOf(".") + 1);
             }
 
-            // --- NORMALIZATION: Map technical keys to the user's 6 Sub-System keys ---
-            if ("cctvStatus".equals(actualKey)) actualKey = "cctv";
-            else if ("iasStatus".equals(actualKey)) actualKey = "ias";
-            else if ("basStatus".equals(actualKey)) actualKey = "bas";
-            else if ("fireAlarmStatus".equals(actualKey) || "fasStatus".equals(actualKey)) actualKey = "fas";
-            else if ("timeLockHealth".equals(actualKey)) actualKey = "timeLock";
-            else if ("accessControlStatus".equals(actualKey)) actualKey = "accessControl";
-            
-            String finalKey = prefix + actualKey;
-
-            // Skip if explicitly excluded
-            if (shouldSkip(actualKey, fullKey)) {
+            if (COMPLEX_FIELDS.contains(actualKey)) {
+                processComplexField(prefix, actualKey, String.valueOf(value), filtered);
                 continue;
             }
 
-            // Keep if explicitly important
-            if (IMPORTANT_KEYS.contains(actualKey) || IMPORTANT_KEYS.contains(fullKey)) {
-                Object finalValue = value;
-                String valueStr = String.valueOf(value);
+            String normalizedKey = normalizeKey(actualKey);
+            String finalKey = prefix + normalizedKey;
+
+            if (IDENTITY_FIELDS.contains(normalizedKey) || SUB_SYSTEM_FIELDS.contains(normalizedKey) || 
+                HARDWARE_FIELDS.contains(normalizedKey) || ALARM_FIELDS.contains(normalizedKey) || actualKey.equals("SYSTEM_NOTE")) {
                 
-                // --- VALUE NORMALIZATION: Standardize "Healthy/On" to "Online" ---
-                if ("Healthy".equalsIgnoreCase(valueStr) || "On".equalsIgnoreCase(valueStr)) {
-                    finalValue = "Online";
-                } else if ("Fault".equalsIgnoreCase(valueStr)) {
-                    finalValue = "Offline";
-                }
-
-                if (isTooLarge(valueStr) && !actualKey.equals("SYSTEM_NOTE") && !actualKey.equals("available_devices_for_user_to_choose_from")) {
-                    filtered.put(finalKey, simplifyValue(String.valueOf(finalValue)));
-                } else {
-                    filtered.put(finalKey, finalValue);
-                }
-                continue;
-            }
-
-            // For unknown keys, only keep if value is small and useful
-            String valueStr = String.valueOf(value);
-            if (valueStr.length() < 100 && !valueStr.equals("[]") && !valueStr.equals("{}")) {
-                filtered.put(fullKey, value);
+                Object finalVal = standardizeValue(normalizedKey, value);
+                filtered.put(finalKey, finalVal);
             }
         }
-
-        log.info("Context filtered: {} keys → {} keys (removed {} keys)",
-                originalSize, filtered.size(), originalSize - filtered.size());
-
         return filtered;
     }
 
-    /**
-     * Check if a key should be skipped entirely.
-     */
-    private static boolean shouldSkip(String actualKey, String fullKey) {
-        if (SKIP_KEYS.contains(actualKey) || SKIP_KEYS.contains(fullKey)) {
-            return true;
-        }
-
-        for (String suffix : SKIP_SUFFIXES) {
-            if (actualKey.endsWith(suffix) || fullKey.endsWith(suffix)) {
-                return true;
+    private static void processComplexField(String prefix, String key, String jsonStr, Map<String, Object> filtered) {
+        try {
+            if (jsonStr == null || jsonStr.equals("N/A") || jsonStr.isEmpty()) return;
+            JsonNode node = objectMapper.readTree(jsonStr);
+            
+            if ((key.equals("rock_CAMERAdETAILS") || key.equals("cp_plus_camera_status")) && node.isArray()) {
+                int total = node.size();
+                int active = 0;
+                for (JsonNode cam : node) {
+                    String status = cam.has("Active Status") ? cam.get("Active Status").asText() : cam.get("camera_status").asText();
+                    if ("Active".equalsIgnoreCase(status)) active++;
+                }
+                filtered.put(prefix + "cctv_camera_count", total);
+                filtered.put(prefix + "cctv_online_count", active);
+            } else if (key.equals("rock_HddINFO") && node.isArray()) {
+                JsonNode hdd = node.get(0); // Primary slot
+                if (hdd != null) {
+                    filtered.put(prefix + "hdd_status", hdd.get("HDDStatus").asText());
+                    filtered.put(prefix + "hdd_capacity", hdd.get("HDDcapacity").asText() + "TB");
+                    filtered.put(prefix + "hdd_free", hdd.get("HDDfreeSpace").asText() + "GB");
+                }
+            } else if (key.equals("battery_status") || key.equals("ac_status")) {
+                Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> field = fields.next();
+                    filtered.put(prefix + field.getKey(), field.getValue().asText());
+                }
             }
+        } catch (Exception e) {
+            log.warn("Parsing error for {}: {}", key, e.getMessage());
         }
-
-        for (String prefix : SKIP_PREFIXES) {
-            if (actualKey.startsWith(prefix) || fullKey.startsWith(prefix)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
-    /**
-     * Check if a value string exceeds the maximum length.
-     */
-    private static boolean isTooLarge(String value) {
-        return value != null && value.length() > MAX_VALUE_LENGTH;
+    private static Object standardizeValue(String key, Object value) {
+        String valStr = String.valueOf(value);
+        if (valStr.equalsIgnoreCase("true") || valStr.equalsIgnoreCase("On") || valStr.equalsIgnoreCase("Healthy")) return "Online";
+        if (valStr.equalsIgnoreCase("false") || valStr.equalsIgnoreCase("Off") || valStr.equalsIgnoreCase("Fault") || valStr.equalsIgnoreCase("Inactive")) return "Offline";
+        return value;
     }
 
-    /**
-     * Simplify a large value by truncating or summarizing.
-     */
-    private static String simplifyValue(String value) {
-        if (value == null) return null;
-
-        String trimmed = value.trim();
-
-        // For JSON objects, try to keep the first part
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            return trimmed.substring(0, Math.min(250, trimmed.length())) + "...[truncated]";
-        }
-
-        return value.substring(0, Math.min(200, value.length())) + "...[truncated]";
+    private static String normalizeKey(String key) {
+        if (key.equals("cctvStatus") || key.equals("cameraLinkStatus")) return "cctv";
+        if (key.equals("iasStatus") || key.equals("ias_status")) return "ias";
+        if (key.equals("fasStatus") || key.equals("fireAlarmStatus")) return "fas";
+        if (key.equals("timeLockHealth") || key.equals("tlStatus")) return "timeLock";
+        if (key.equals("accessControlStatus")) return "accessControl";
+        if (key.equals("battery_status_battery_voltage") || key.equals("gatewayStatus_battery_voltage")) return "battery_voltage";
+        if (key.equals("ac_status_ac_voltage")) return "ac_voltage";
+        if (key.equals("current_status_system_current")) return "system_current";
+        return key;
     }
 }
