@@ -12,7 +12,8 @@ import com.seple.ThingsBoard_Bot.util.TokenCounterService;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Senior Security Analyst (SAI) - Optimized for exact Q&A Guide adherence.
+ * Senior Security Analyst (SAI) - Final Merged Architecture.
+ * Harmonizes strict Q&A templates with absolute counting accuracy.
  */
 @Slf4j
 @Service
@@ -25,49 +26,52 @@ public class ChatService {
     private final ObjectMapper objectMapper;
 
     private static final String SYSTEM_PROMPT = """
-            You are SAI (Smart Assistant for IoT), a Senior Security Analyst.
-            Your role is to provide structured, professional answers following the MANDATORY FORMATS below.
+            You are SAI (Smart Assistant for IoT), a Senior Security Analyst for bank branch monitoring.
+            You MUST follow these rules exactly to match the Branch System QA Guide.
             
             ========================================
-            MANDATORY RESPONSE TEMPLATES
+            CORE TERMINOLOGY RULES
             ========================================
-            
-            1. GATEWAY STATUS:
-               **The Branch Gateway status is currently [ONLINE/OFFLINE]. [Details].**
-               
-            2. BATTERY/AC VOLTAGE:
-               **[Metric Name]: [Value] [V DC/V AC].** (Example: Battery Voltage Reading: 13.6V DC)
-               
-            3. ACTIVE/OFFLINE DEVICES:
-               **[Category] ([Count]): [Device 1], [Device 2]... [Status Description].**
-               
-            4. CCTV CAMERA STATUS:
-               **CCTV Camera Status: [Count] cameras are ONLINE.**
-               
-            5. CCTV HDD:
-               **CCTV HDD Status: [HEALTHY/ERROR]. HDD Slot: [Slot], Capacity: [Size], Used: [Used], Free: [Free].**
-               
-            6. SUB-SYSTEM POWER/ALARM (IAS, BAS, FAS):
-               **[System Name] [Power/Alarm] Status: [ON/OFF/NORMAL/ALARM]. [Contextual Note].**
-               
-            7. TIME LOCK / ACCESS CONTROL:
-               **[System Name] [Metric] Status: [Status]. [Actionable Advice].**
+            1. NEVER use the word "Device" for a branch. ALWAYS use "Branch" (e.g., "Branch BALLY BAZAR").
+            2. For global overviews, the FIRST LINE must be: **Total: [X] Online | [Y] Offline**
             
             ========================================
-            ANALYTICAL RULES
+            MANDATORY RESPONSE BLUEPRINTS
             ========================================
-            - CORRELATION: Link Mains Power status to Battery health.
-            - N/A POLICY: If a value is "N/A", report as "Not Installed" or "Offline". NEVER Online.
-            - ACCURACY: Follow the count and list in "SYSTEM_NOTE" exactly.
-            - NAMES: Use the Branch Name (e.g. BALLY BAZAR).
+            
+            1. GLOBAL OVERVIEW ("What branches", "What devices", "List all"):
+               **Total: [X] Online | [Y] Offline**
+               
+               Online:
+               - [Branch Name 1]
+               - [Branch Name 2]
+               
+               Offline:
+               - [Branch Name 3]
+               
+               *Based on gateway connectivity from SYSTEM_NOTE.*
+               
+            2. GATEWAY STATUS:
+               **The Branch Gateway status is currently [ONLINE/OFFLINE]. All systems are operational.**
+               
+            3. VOLTAGE/METRICS:
+               **[Metric Name]: [Value][V DC/V AC/Amp].** (e.g. Battery Voltage Reading: 13.6V DC)
+               
+            4. ACTIVE DEVICES (Specific Branch):
+               **Active Devices ([Count]): CCTV DVR, IAS Panel... All responding normally.**
+               
+            5. CCTV SYSTEM:
+               **CCTV Camera Status: [X] cameras are ONLINE.**
+               
+            6. SUB-SYSTEM POWER/ALARM:
+               **[System Name] [Metric] Status: [ON/OFF/NORMAL/ALARM]. [Context].**
             
             ========================================
-            MANDATORY OUTPUT STYLE
+            REASONING & ACCURACY
             ========================================
-            - Start with a **Bold Summary Header**.
-            - Use bullet points for metrics.
-            - *Italicize data fields used at the bottom.*
-            - NO conversational filler.
+            - N/A POLICY: Report "N/A" as "Offline" or "Not Installed". NEVER Online.
+            - SYSTEM_NOTE: Follow the counts and device lists in SYSTEM_NOTE exactly.
+            - NO FLUFF: No greetings, no "Here is your report". Start with the bold summary.
             """;
 
     public ChatService(DataService dataService, UserDataService userDataService, OpenAIClient openAIClient, ChartService chartService, ChatMemoryService chatMemoryService) {
@@ -108,7 +112,9 @@ public class ChatService {
         if (allDevices == null || allDevices.isEmpty()) return new HashMap<>();
         
         String qLower = (question != null ? question.toLowerCase() : "");
-        boolean isGlobal = qLower.contains("all") || qLower.contains("any") || qLower.contains("list") || qLower.contains("total") || qLower.contains("branches");
+        
+        // ACCURACY FIX: Added "devices", "have", "total" to global triggers
+        boolean isGlobal = qLower.contains("all") || qLower.contains("any") || qLower.contains("list") || qLower.contains("total") || qLower.contains("branches") || qLower.contains("devices") || qLower.contains("have");
 
         Map<String, Object> flat;
         if (isGlobal) {
@@ -119,7 +125,7 @@ public class ChatService {
             for (Map<String, Object> dev : allDevices) {
                 String name = getBestName(dev).toLowerCase();
                 String technicalName = String.valueOf(dev.getOrDefault("device_name", "")).toLowerCase();
-                if (qLower.contains(name) || qLower.contains(technicalName) || (name.length() > 3 && technicalName.contains(name))) {
+                if (qLower.contains(name) || qLower.contains(technicalName)) {
                     matched.add(dev);
                 }
             }
@@ -130,12 +136,15 @@ public class ChatService {
     }
 
     private void injectGlobalSystemNote(List<Map<String, Object>> devices, Map<String, Object> flat) {
-        int online = 0, offline = 0;
+        List<String> online = new ArrayList<>();
+        List<String> offline = new ArrayList<>();
         for (Map<String, Object> dev : devices) {
+            String name = getBestName(dev);
             String g = String.valueOf(dev.getOrDefault("gateway", "N/A"));
-            if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) online++; else offline++;
+            if ("Online".equalsIgnoreCase(g) || "On".equalsIgnoreCase(g)) online.add(name); else offline.add(name);
         }
-        flat.put("SYSTEM_NOTE", String.format("MANDATORY: Global Stats. Total: %d Online | %d Offline.", online, offline));
+        flat.put("SYSTEM_NOTE", String.format("MANDATORY: Global Overview. Total: %d Online | %d Offline. Online Branches: %s. Offline Branches: %s.", 
+                online.size(), offline.size(), String.join(", ", online), String.join(", ", offline)));
     }
 
     private void injectBranchSystemNote(Map<String, Object> dev, Map<String, Object> flat) {
@@ -145,13 +154,9 @@ public class ChatService {
         if ("Online".equalsIgnoreCase(String.valueOf(dev.get("fas")))) active.add("FAS Panel");
         if ("Online".equalsIgnoreCase(String.valueOf(dev.get("accessControl")))) active.add("Access Control Controller");
         
-        String battery = String.valueOf(dev.getOrDefault("battery_voltage", "N/A"));
-        String ac = String.valueOf(dev.getOrDefault("ac_voltage", "N/A"));
-        
-        flat.put("SYSTEM_NOTE", String.format("MANDATORY: Branch: %s. Active Devices (%d): %s. Offline: %s. Battery: %sV, AC: %sV.", 
+        flat.put("SYSTEM_NOTE", String.format("MANDATORY: Branch: %s. Active Devices (%d): %s. Offline: %s.", 
                 getBestName(dev), active.size(), String.join(", ", active), 
-                active.size() < 4 ? "Some system sub-components may be offline" : "None",
-                battery, ac));
+                active.size() < 4 ? "Some components are offline" : "None"));
     }
 
     private String getBestName(Map<String, Object> dev) {
