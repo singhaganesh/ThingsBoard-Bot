@@ -16,6 +16,7 @@ public class ChatResponse {
     private String answer;
     private Map<String, Object> context;
     private Object chart;
+    private AnswerMetadata metadata;
     private int tokensUsed;
     private long timestamp;
     private boolean error;

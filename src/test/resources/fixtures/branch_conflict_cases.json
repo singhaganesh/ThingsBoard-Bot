@@ -1,0 +1,11 @@
+{
+  "BOI-CHANDANNAGAR": {
+    "battery_status_battery_voltage": "0.0",
+    "gatewayStatus_battery_voltage": "13.0"
+  },
+  "BOI-BHADRESWAR": {
+    "timeLock": "Offline",
+    "timeLockHealth": "Healthy",
+    "tlStatus": "Inactive"
+  }
+}

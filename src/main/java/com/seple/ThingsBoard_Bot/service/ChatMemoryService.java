@@ -28,6 +28,7 @@ public class ChatMemoryService {
     
     // Maps a userToken to the list of device names they are currently discussing
     private final Map<String, List<String>> activeDevices = new ConcurrentHashMap<>();
+    private final Map<String, String> activeBranch = new ConcurrentHashMap<>();
     
     // Maximum number of messages to remember per user (2 Q&A pairs = 4 messages)
     private static final int MAX_HISTORY_MESSAGES = 4;
@@ -100,6 +101,7 @@ public class ChatMemoryService {
         if (sessionId != null) {
             chatHistory.remove(sessionId);
             activeDevices.remove(sessionId);
+            activeBranch.remove(sessionId);
             log.debug("Cleared history and active devices for session '{}'", sessionId);
         }
     }
@@ -122,5 +124,19 @@ public class ChatMemoryService {
             return new ArrayList<>();
         }
         return new ArrayList<>(activeDevices.get(sessionId));
+    }
+
+    public void setActiveBranch(String sessionId, String branchAlias) {
+        if (sessionId != null && branchAlias != null && !branchAlias.isBlank()) {
+            activeBranch.put(sessionId, branchAlias);
+            log.debug("Set active branch for session '{}' to {}", sessionId, branchAlias);
+        }
+    }
+
+    public String getActiveBranch(String sessionId) {
+        if (sessionId == null) {
+            return null;
+        }
+        return activeBranch.get(sessionId);
     }
 }

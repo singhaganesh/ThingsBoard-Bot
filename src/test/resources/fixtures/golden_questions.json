@@ -1,0 +1,113 @@
+[
+  {
+    "question": "List all branches",
+    "intent": "GLOBAL_OVERVIEW",
+    "contains": ["**Total:", "Online:"]
+  },
+  {
+    "question": "What is the status of all devices in all branches right now?",
+    "intent": "GLOBAL_OVERVIEW",
+    "contains": ["**Total:", "Online:"]
+  },
+  {
+    "question": "Show status of all branch devices",
+    "intent": "GLOBAL_OVERVIEW",
+    "contains": ["**Total:", "Online:"]
+  },
+  {
+    "question": "What is Tarakeshwar battery voltage?",
+    "intent": "BATTERY_VOLTAGE",
+    "matchedBranch": "BOI-TARAKESHWAR",
+    "contains": ["Battery Voltage Reading", "14"]
+  },
+  {
+    "question": "How many cameras are online in Liluah?",
+    "intent": "CCTV_STATUS",
+    "matchedBranch": "BOI-LILUAH",
+    "contains": ["12", "ONLINE"]
+  },
+  {
+    "question": "What is Bhadreswar time lock status?",
+    "intent": "SUBSYSTEM_STATUS",
+    "matchedBranch": "BOI-BHADRESWAR",
+    "contains": ["Time Lock Status", "OFFLINE"]
+  },
+  {
+    "question": "What is Bally Bazar IAS status?",
+    "intent": "SUBSYSTEM_STATUS",
+    "matchedBranch": "BOI-BALLYBAZAR",
+    "contains": ["IAS Status", "ONLINE"]
+  },
+  {
+    "question": "What are the active devices in Bally Bazar?",
+    "intent": "ACTIVE_DEVICES",
+    "matchedBranch": "BOI-BALLYBAZAR",
+    "contains": ["CCTV DVR", "IAS Panel"]
+  },
+  {
+    "question": "Why is Trendz fault?",
+    "intent": "FAULT_REASON",
+    "matchedBranch": "Trendz_Testing_Device",
+    "contains": ["fault indication", "fire alarm fault indicator"]
+  },
+  {
+    "question": "Show historical camera disconnects for Chandannagar",
+    "intent": "CAMERA_DISCONNECT_HISTORY",
+    "matchedBranch": "BOI-CHANDANNAGAR",
+    "contains": ["No historical camera disconnects found"]
+  },
+  {
+    "question": "How many cameras are online in Tarakeshwar?",
+    "intent": "CCTV_STATUS",
+    "matchedBranch": "BOI-TARAKESHWAR",
+    "contains": ["14 of 15", "ONLINE"]
+  },
+  {
+    "question": "What is the current status of the Branch Chandannagar Gateway?",
+    "intent": "GATEWAY_STATUS",
+    "matchedBranch": "BOI-CHANDANNAGAR",
+    "contains": ["Gateway status", "ONLINE"]
+  },
+  {
+    "question": "Which devices are currently active on the Branch Bally Bazar Gateway?",
+    "intent": "ACTIVE_DEVICES",
+    "matchedBranch": "BOI-BALLYBAZAR",
+    "contains": ["CCTV DVR", "IAS Panel"]
+  },
+  {
+    "question": "What is the Branch Chandannagar CCTV disconnect status right now?",
+    "intent": "CAMERA_DISCONNECT_HISTORY",
+    "matchedBranch": "BOI-CHANDANNAGAR",
+    "contains": ["No disconnected cameras detected"]
+  },
+  {
+    "question": "What is the Branch Tarakeshwar Gateway battery low status right now?",
+    "intent": "BATTERY_LOW_STATUS",
+    "matchedBranch": "BOI-TARAKESHWAR",
+    "contains": ["Battery Low Status", "NORMAL"]
+  },
+  {
+    "question": "What are the offline devices in the Branch Bhadreswar Gateway right now?",
+    "intent": "OFFLINE_DEVICES",
+    "matchedBranch": "BOI-BHADRESWAR",
+    "contains": ["Offline Devices", "Time Lock"]
+  },
+  {
+    "question": "What is the Branch Chandannagar CCTV HDD information right now?",
+    "intent": "CCTV_HDD_INFO",
+    "matchedBranch": "BOI-CHANDANNAGAR",
+    "contains": ["CCTV HDD Information", "Slot 1"]
+  },
+  {
+    "question": "What is the Branch Tarakeshwar Time Lock door status right now?",
+    "intent": "DOOR_STATUS",
+    "matchedBranch": "BOI-TARAKESHWAR",
+    "contains": ["Time Lock Door Status", "CLOSE"]
+  },
+  {
+    "question": "What is the Branch Trendz Access Control total user count right now?",
+    "intent": "ACCESS_CONTROL_USER_COUNT",
+    "matchedBranch": "Trendz_Testing_Device",
+    "contains": ["user count is not available", "ONLINE"]
+  }
+]

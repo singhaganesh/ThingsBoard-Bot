@@ -1,0 +1,403 @@
+Gateway (Branch System)
+
+Q1. What is the Branch (Name) Gateway status right now?
+ans. The Branch Gateway status is currently ONLINE. All systems are operational and functioning normally.
+
+Q2. What is the current status of the Branch (Name) Gateway?
+ans. Current Branch Gateway Status: ACTIVE. Network connectivity is stable with no reported issues.
+
+Q3. Is the Branch (Name) Gateway working properly?
+ans. Yes, the Branch Gateway is working properly. All connected devices are communicating normally.
+
+Q4. What is the Branch (Name) Gateway battery voltage right now?
+ans. Current Battery Voltage: 13.6V DC.
+
+Q5. What is the current battery voltage of the Branch (Name) Gateway?
+ans. Battery Voltage Reading: 13.6V DC.
+
+Q6. How much battery voltage does the Branch (Name) Gateway have?
+ans. The Branch Gateway currently has 13.6V DC battery voltage.
+
+Q7. What is the Branch (Name) Gateway AC voltage right now?
+ans. AC Input Voltage: 220V AC.
+
+Q8. What is the AC input voltage of the Branch (Name) Gateway?
+ans. The current AC input voltage is 220V AC.
+
+Q9. How much AC voltage is coming to the Branch (Name) Gateway?
+ans. AC Voltage Input: 220V AC.
+
+Q10. What is the Branch Gateway (Name) battery low status right now?
+ans. Battery Low Status: NORMAL. No low battery warning active.
+
+Q11. Is the Branch (Name) Gateway battery low?
+ans. No, the battery is NOT low. 
+
+Q12. Is there a low battery warning on the Branch (Name) Gateway?
+ans. No low battery warning is currently active. Battery is in healthy condition.
+
+Q13. What is the Branch (Name) Gateway battery status right now?
+ans. Battery Status: HEALTHY. Voltage: 13.6V DC.
+
+Q14. How is the battery condition of the Branch (Name) Gateway?
+ans. Battery Condition: GOOD. The battery is fully charged and operating within normal parameters.
+
+Q15. Is the Branch (Name) Gateway battery healthy?
+ans. Yes, the Branch Gateway battery is healthy. Voltage reading is normal at 13.6V DC
+
+Q16. What are the active devices in the Branch (Name) Gateway right now?
+ans. Active Devices (4): CCTV DVR, IAS Panel, FAS Panel, Access Control Controller. All responding normally.
+
+Q17. Which devices are currently active on the Branch (Name) Gateway?
+ans. Currently Active: CCTV DVR, IAS Panel, FAS Panel, Access Control Controller — 4 devices active.
+
+Q18. Show active devices on the Branch (Name) Gateway
+ans. Active Devices List: 1. CCTV DVR (Online), 2. IAS Panel (Online), 3. FAS Panel (Online), 4. Access Control (Online).
+
+Q19. What are the fault devices in the Branch (Name) Gateway right now?
+ans. Fault Devices: 1 device — BAS Panel. Requires inspection.
+
+Q20. Are there any faulty devices in the Branch (Name) Gateway?
+ans. Yes, 1 faulty device detected: BAS Panel. Other devices are functioning normally.
+
+Q21. Show fault devices in the Branch Gateway
+ans. Fault Device Report: BAS Panel.
+
+Q22.What are the offline devices in the Branch (Name) Gateway right now?
+ans. Offline Devices: 1 device — Time Lock Controller. Last online: 3 hours ago.
+
+Q23. Which devices are offline on the Branch Gateway?
+ans. Currently Offline: Time Lock Controller. All other devices are online.
+
+Q24. Show offline devices in the Branch (Name) Gateway
+ans. Offline Device: Time Lock Controller — Status: OFFLINE. Possible cause: Power interruption or network issue.
+
+Q25. What are all connected devices in the Branch (Name) Gateway right now?
+ans. All Connected Devices (6): CCTV DVR, IAS Panel, FAS Panel, Access Control, BAS Panel, Time Lock Controller.
+
+Q26. Show all connected devices in the Branch (Name) Gateway
+ans. Connected Devices: 1. CCTV DVR, 2. IAS Panel, 3. FAS Panel, 4. Access Control, 5. BAS Panel, 6. Time Lock Controller.
+
+Q27. List all devices connected to the Branch (Name) Gateway
+ans. Total 6 devices registered: CCTV DVR (Active), IAS Panel (Active), FAS Panel (Active), Access Control (Active), BAS Panel (Fault), Time Lock (Offline).
+
+Q28. What is the Branch (Name) Gateway power status right now?
+ans. Power Status: ON. AC Mains: 220V (Normal), Battery Backup: 13.6V (Charged).
+
+Q29. Is the Branch (Name) Gateway power on or off?
+ans. Branch Gateway Power: ON. Running on AC Mains power. Battery backup is fully charged and ready.
+
+Q30. Check power status of the Branch (Name) Gateway
+ans. Power Check Result: AC Input: 220V ✔, Battery: 13.6V ✔, Power Status: NORMAL — No power issues detected.
+
+Q31. What is the Branch (Name) Gateway network status right now?
+ans. Network Status: ON. Network Operator: Airtel.
+
+Q32. Is the Branch (Name) Gateway online or offline?
+ans. The Branch Gateway is ON. Network connection is active and stable. Network Operator: Airtel.
+
+Q33. Check network connectivity of the Branch (Name) Gateway
+ans. Network Check: Status: On. Network Operator: Airtel.
+
+Q34. What is the System current status of the Branch (Name) Gateway right now?
+ans. System current status: 2.0 Amp.
+
+Q35. Give me the System current status of the Branch (Name) Gateway
+ans. System current status — 2.0 Amp.
+
+Q36. Show overall System current status of the Branch (Name) Gateway
+ans. System current status: 2.0 Amp.
+
+Q37. What is the status of all devices in all branches right now?
+ans. All Branch Status — Branch A: 4 Online, 1 Offline | Branch B: 6 Online | Branch C: 5 Online, 1 Offline.
+
+Q38. Show status of all branch devices
+ans. Multi-Branch Summary: Branch A: Online (1 Offline), Branch B: 6 Online, Branch C: Online (1 offline).
+
+Q39. Display all device statuses across branches
+ams. Cross-Branch Device Report: 15 devices total — 13 Online, 1 Offline (BAS Panel, Branch A), 1 Offline (Time Lock, Branch A).
+
+Q40. What is the Branch (Name) Gateway alarm status right now?
+ans. Alarm Status: NO ACTIVE ALARMS. All monitored systems are within normal operating thresholds.
+
+Q41. Is there any alarm in the Branch (Name) Gateway?
+ans. No alarms currently active in the Branch Gateway. System is operating normally.
+
+Q42. Check alarm condition of the Branch (Name) Gateway
+ans. Alarm Check Result: CLEAR. No alarms triggered.
+
+Q43. What is the Branch (Name) Gateway error status right now?
+ans. Error Status: 1 Error — BAS Panel. All other systems error-free.
+
+Q44. Are there any errors in the Branch (Name) Gateway?
+ans. Yes, 1 error: BAS Panel. Recommend checking BAS panel.
+
+Q45. Show error status of the Branch (Name) Gateway
+ans. Error Report: BAS Panel.
+
+CCTV System
+
+Q1. What is the Branch (Name) CCTV power status right now?
+ans. CCTV Power Status: ON. 
+
+Q2. Is the Branch (Name) CCTV system powered on?
+ans. Yes, the CCTV system is powered ON.
+
+Q3. Check CCTV power status Branch (Name).
+ans. CCTV Power Check: ON.
+
+Q4. What is the Branch (Name) CCTV camera status right now?
+ans. CCTV Camera Status: 8 cameras are ONLINE.
+
+Q5. Are the Branch (Name) CCTV cameras working properly?
+ans.  8 cameras are working properly.
+
+Q6. Show CCTV camera status Branch (Name).
+ans. Camera Status Report: CAM1: Online, CAM2: Online, CAM3: Online, CAM4: Online, CAM5: Online, CAM6: Online, CAM7: Online, CAM8: Online.
+
+Q7. What is the Branch (Name) CCTV HDD Error right now?
+ans. CCTV HDD Error Status: No Error.
+
+Q8. Is the Branch (Name) CCTV HDD working properly?
+ans. Yes, the CCTV HDD is working properly. No Error.
+
+Q9. Check HDD Error status of CCTV system of Branch (Name).
+ans. HDD Error Check: Status: Healthy, No Error.
+
+Q10. What is the Branch (Name) CCTV alarm status right now?
+ans. CCTV Alarm Status: NVR/DVR Off. Off Time- 2026-03-15 19:57:51.
+
+Q11. Is there Branch (Name) any CCTV alarm?
+ans. Yes, NVR/DVR Off. Off Time- 2026-03-15 19:57:51.
+
+Q12. Check CCTV alarm condition of Branch (Name). 
+ans. CCTV Alarm Check: NVR/DVR Off. Off Time- 2026-03-15 19:57:51.
+
+Q13. What is the Branch (Name) CCTV disconnect status right now?
+ans. CCTV Disconnect Status: 1 camera disconnected — Channel 3.
+
+Q14. Branch (Name) Are any CCTV devices disconnected?
+ans. Yes, Channel 3 is disconnected. all other 7 cameras are connected and working.
+
+Q15. Show disconnected CCTV devices of Branch (Name).
+ans. Disconnected CCTV Devices: Channel 3.
+
+Q16. What is the Branch (Name) CCTV HDD information right now?
+ans. CCTV HDD Status: HEALTHY. HDD Slot: Slot no, Capacity: Hdd Memory, Used: Memory Use(%), Free: Memory Free (%).
+
+Q17. Show CCTV HDD details of Branch (Name).
+ans. HDD Details — HDD Slot: Slot no, Capacity: Hdd Memory, Used: Memory Use(%), Free: Memory Free (%). Status: Healthy,
+
+Q18. Give CCTV HDD information of Branch (Name).
+ans. CCTV HDD Information: Drive Type: Status: HEALTHY. HDD Slot: Slot no, Capacity: Hdd Memory, Used: Memory Use(%), Free: Memory Free (%).
+
+Q19. What is the Branch (Name) CCTV recording information right now?
+ans. CCTV Recording Info: Channel No- Camera No, Device Name- Camera Name, Recording Days- Rec. Days.
+
+Q20. Is CCTV recording working properly on Branch (Name)?
+ans. Yes, CCTV recording is working properly. Channel No- Camera No, Device Name- Camera Name, Recording Days- Rec. Days..
+
+Q21. Show Branch (Name) recording details of CCTV.
+ans. Recording Details: Channel No- Camera No, Device Name- Camera Name, Recording Days- Rec. Days...
+
+Q22. What is the Branch (Name) CCTV camera information right now?
+ans. Camera Info: Total: No of cameras, Channel No:Total no of Channels, Make: Brand Name, Model: Model No,Type: IP No, Resolution: Camera Resolutions. Online: Camera Online No.
+
+Q23. Show camera details of CCTV of Branch (Name).
+ans. Camera Details: Total: No of cameras, Channel No:Total no of Channels, Make: Brand Name, Model: Model No,Type: IP No, Resolution: Camera Resolutions. Online: Camera Online No.
+
+Q24. Give Branch (Name) information about CCTV cameras.
+ans. CCTV Camera Info: Total: No of cameras, Channel No:Total no of Channels, Make: Brand Name, Model: Model No,Type: IP No, Resolution: Camera Resolutions. Online: Camera Online No.
+
+Q25. What is the Branch (Name) CCTV device information right now?
+ans. CCTV Device Info: DVR/NVR Model: Device Model No, Channels: Total No of Channel, IP: Show Device IP, Firmware: Show Device Vertion, Status: Online.
+
+Q26. Show CCTV device details of Branch (Name).
+ans. CCTV Device Details: DVR/NVR Model: Device Model No, Channels: Total No of Channel, IP: Show Device IP, Firmware: Show Device Vertion, Status: Online.
+
+Q27. Branch (Name) Give full info of CCTV system.
+ans. Full CCTV System Info: DVR/NVR Model: Device Model No, Channels: Total No of Channel, IP: Show Device IP, Firmware: Show Device Vertion, Status: Online.Recording: Active.
+
+
+IAS (Intrusion Alarm System)
+
+Q1. What is the Branch (Name) IAS power status right now?
+ans. IAS Power Status: ON. Panel is receiving DC Power.
+
+Q2. Branch (Name) is the IAS system powered on?
+ans. Yes, the IAS is powered ON.
+
+Q3. Check IAS power status of Branch (Name).
+ans. IAS Power Check: Panel Power: ON — All power sources normal.
+
+Q4. What is the Branch (Name) IAS alarm status right now?
+ans. IAS Alarm Status: NO ACTIVE ALARMS.
+
+Q5. Branch (Name) is there any IAS alarm?
+ans. No IAS alarms are currently active.
+
+Q6. Check IAS alarm condition of Branch (Name).
+ans. IAS Alarm Check: Active Alarms: None.
+
+Q7. What is the Branch (Name) IAS fault status right now?
+ans. IAS Fault Status: NO FAULTS DETECTED. All sensors, zones, and communication lines are functioning correctly.
+
+Q8. Branch (Name) is there any fault in IAS?
+ans. No faults detected in the IAS system. Sensors, and communication lines are working properly.
+
+Q9. Show IAS fault status of Branch (Name).
+ans. IAS Fault Report: Active Faults: None.
+
+BAS (Building Automation System)
+
+Q1. What is the Branch (Name) BAS power status right now?
+ans. BAS Power Status: ON.
+
+Q2. Branch (Name) is the BAS system powered on?
+ans. Yes, the BAS (Burglar Alarm System) main panel is powered ON.
+
+Q3. Check BAS power status of Branch (Name).
+ans. BAS Power Check: Panel Power: ON
+
+Q4. What is the Branch (Name) BAS alarm status right now?
+ans. BAS Alarm Status: NO ACTIVE ALARMS.
+
+Q5. Branch (Name) is there any BAS alarm?
+ans. No active BAS alarm.
+
+Q6. Check BAS alarm condition of Branch (Name).
+ans. BAS Alarm Check: Alarms: None.
+
+Q7. What is the Branch (Name) BAS fault status right now?
+ans. BAS Fault Status: 1 FAULT ACTIVE — INTRUSION ALARM SYSTEM FAULT.
+
+Q8. Branch (Name) is there any fault in BAS?
+ans. Yes, 1 fault in BAS: INTRUSION ALARM SYSTEM FAULT. since approximately 2 hours ago.
+
+Q9. Show BAS fault status of Branch (Name)
+ans. BAS Fault Report: INTRUSION ALARM SYSTEM FAULT. since approximately 2 hours ago.
+
+
+FAS (Fire Alarm System)
+
+Q1. What is the Branch (Name) FAS power status right now?
+ans. FAS Power Status: ON.
+
+Q2. Branch (Name) is the fire alarm system powered on?
+ans. Yes, the FAS (Fire Alarm System) is powered ON.
+
+Q3. Check FAS power status of Branch (Name).
+ans. FAS Power Check: Panel: ON — All power sources healthy.
+
+Q4. What is the Branch (Name) FAS alarm status right now?
+ans. FAS Alarm Status: NO ACTIVE ALARMS.
+
+Q5. Branch (Name) is there any fire alarm active?
+ans. No alarms are currently active.
+
+Q6. Check FAS  alarm status of Branch (Name).
+ans. Fire Alarm Check: Active Alarms: None.
+
+Q7. What is the Branch (Name) FAS fault status right now?
+ans. FAS Fault Status: NO FAULTS DETECTED.
+
+Q8. Branch (Name) Is there any fault in fire alarm system?
+ans. No faults detected in the FAS.
+
+Q9. Show FAS fault status of Branch (Name).
+ans. FAS Fault Report: Active Faults: None.
+
+Time Lock System
+
+Q1. What is the Branch (Name) Time Lock power status right now?
+ans. Time Lock Power Status: OFFLINE. The Time Lock controller has been offline for approximately 3 hours.
+
+Q2. Branch (Name) is the Time Lock powered on?
+ans. The Time Lock status is currently OFFLINE and cannot confirm power status. Last known state: Powered ON (3 hours ago).
+
+Q3. Check Time Lock power status of Branch (Name).
+ans. Time Lock Power Check: Current Status: OFFLINE (3 hours).
+
+Q4. What is the Branch (Name) Time Lock alarm status right now?
+ans. Time Lock Alarm Status: TIME LOCK SYSTEM OFF. Device is currently offline.
+
+Q5. Branch (Name) is there any alarm in Time Lock?
+ans. Time Lock system is OFFLINE. Please check device physically.
+
+Q6. Check Time Lock alarm status
+ans. Time Lock Alarm Check: Status: OFFLINE — Last known alarm status: No Active Alarms. Reconnection required to get current status
+
+Q7. What is the Branch (Name) Time Lock fault status right now?
+ans. Time Lock Fault Status: OFFLINE — Device disconnected 3 hours ago.
+
+Q8. Branch (Name) is there any fault in Time Lock?
+ans. Fault detected: Time Lock Controller is OFFLINE. Physical inspection of the device is recommended.
+
+Q9. Show Time Lock fault status of Branch (Name).
+ans. Time Lock Fault Report: Device Status: OFFLINE, Action: On-site inspection required.
+
+Q10. What is the Branch (Name) Time Lock door status right now?
+ans. Time Lock Door Status: N/A —  is offline. Last known door status: N/A. Physical verification recommended.
+
+Q11. Branch (Name) is the Time Lock door open or closed?
+ans. Cannot determine door status — Time Lock is OFFLINE. Last recorded state: Close. Please verify physically at the branch.
+
+Q12. Check Time Lock door status of Branch (Name).
+ans. Door Status Check: Result: N/A (Offline). Last known state: Closed of 3 hours ago. Immediate site visit recommended.
+
+
+Access Control System
+
+Q1. What is the Branch (Name) Access Control power status right now?
+ans. Access Control Power Status: ON.
+
+Q2. Branch (Name) is the Access Control system powered on?
+ans. Yes, Access Control is powered ON.
+
+Q3. Check Access Control power status of Branch (Name).
+ans. Access Control Power: ON.
+
+Q4. What is the Branch (Name) Access Control alarm status right now?
+ans. Access Control Alarm Status: NO ACTIVE ALARMS.
+
+Q5. Branch (Name) is there any alarm in Access Control system?
+ans. No Access Control alarms currently active.
+
+Q6. Check Access Control alarm status of Branch (Name).
+ans. Access Control Alarm Check: NO ACTIVE ALARMS
+
+Q7. What is the Branch (Name) Access Control fault status right now?
+ans. Access Control Fault Status: NO FAULTS.
+
+Q8. Branch (Name) is there any fault in Access Control system?
+ans. No faults detected in Access Control system.
+
+Q9. Show Access Control fault status of Branch (Name).
+ans. Access Control Fault Report: NO FAULTS DETECTED.
+
+Q10. What is the Branch (Name) Access Control door status right now?
+ans. Door Status — Door  Open.
+
+Q11. Branch (Name) Are the doors locked or unlocked?
+ans. Door Status — Door  Open.
+
+Q12. Check the Access Control door status of Branch (Name).
+ans. Door Status — Door  Open.
+
+Q13. What is the Branch (Name) Access Control total user count right now?
+ans. Total Registered Users: 142.
+
+Q14. How many users are in the Access Control system of Branch (Name).
+ans. Access Control has 142 total registered users.
+
+Q15. Show total users in Access Control of Branch (Name).
+ans. User Count: Total: 142.
+
+Q16. What is the Branch (Name) Access Control device information right now?
+ans. Access Control Device Info: Device: Name, Model: Name, IP: Device IP, Firmware:Device Version, Doors: Open, Status: Online.
+
+Q17. Show Branch (Name) Access Control device details?
+ans. Device Details: Device: Name, Model: Name, IP: Device IP, Firmware:Device Version, Doors: Open, Status: Online.
+
+Q18. Give full information of Access Control system of Branch (Name).
+ans. Full Access Control Info: Device: Name, Model: Name, IP: Device IP, Firmware:Device Version, Doors: Open, Status: Online.

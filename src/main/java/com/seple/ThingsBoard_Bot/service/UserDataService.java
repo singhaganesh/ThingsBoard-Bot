@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
+import com.seple.ThingsBoard_Bot.model.domain.BranchSnapshot;
+import com.seple.ThingsBoard_Bot.service.normalization.BranchSnapshotMapper;
 
 /**
  * Per-user data caching service with 5-MINUTE TTL + background refresh.
@@ -28,6 +30,7 @@ public class UserDataService {
 
     private static final Logger log = LoggerFactory.getLogger(UserDataService.class);
     private final UserAwareThingsBoardClient userTbClient;
+    private final BranchSnapshotMapper branchSnapshotMapper;
 
     // Per-user cache: key = userToken hash, value = cached data + timestamp
     private final ConcurrentHashMap<String, CachedUserData> userCacheMap = new ConcurrentHashMap<>();
@@ -37,8 +40,9 @@ public class UserDataService {
     // Refresh threshold (refresh when 80% of TTL elapsed)
     private static final long REFRESH_THRESHOLD_MS = CACHE_TTL_MS * 80 / 100;
 
-    public UserDataService(UserAwareThingsBoardClient userTbClient) {
+    public UserDataService(UserAwareThingsBoardClient userTbClient, BranchSnapshotMapper branchSnapshotMapper) {
         this.userTbClient = userTbClient;
+        this.branchSnapshotMapper = branchSnapshotMapper;
     }
 
     // ==================== Cache Entry ====================
@@ -204,6 +208,15 @@ public class UserDataService {
      */
     public List<Map<String, String>> getUserDevicesList(String userToken) {
         return userTbClient.getUserDevices(userToken);
+    }
+
+    public List<BranchSnapshot> getUserBranchSnapshots(String userToken) {
+        List<Map<String, Object>> rawDevices = getUserDevicesData(userToken);
+        List<BranchSnapshot> snapshots = new ArrayList<>();
+        for (Map<String, Object> rawDevice : rawDevices) {
+            snapshots.add(branchSnapshotMapper.map(rawDevice));
+        }
+        return snapshots;
     }
 
     /**
