@@ -11,8 +11,10 @@ public class AnswerTemplateService {
 
     public String renderGlobalOverview(List<String> onlineBranches, List<String> offlineBranches) {
         StringBuilder builder = new StringBuilder();
-        builder.append("**Total: ").append(onlineBranches.size()).append(" Online | ")
+        builder.append("**Total: ")
+                .append(onlineBranches.size()).append(" Online | ")
                 .append(offlineBranches.size()).append(" Offline**");
+        builder.append("\nFor your question about all branches, here is the current branch-level status.");
 
         if (!onlineBranches.isEmpty()) {
             builder.append("\n\nOnline:");
@@ -32,37 +34,54 @@ public class AnswerTemplateService {
     }
 
     public String renderGatewayStatus(BranchSnapshot branch, String stateText) {
-        return "**The Branch Gateway status is currently " + stateText + ".**";
+        return "**For Branch " + branchName(branch) + ", the Gateway status is currently " + stateText + ".**";
     }
 
-    public String renderMetric(String label, Double value, String unit) {
+    public String renderMetric(BranchSnapshot branch, String label, Double value, String unit) {
         if (value == null) {
-            return "**" + label + ": N/A.**";
+            return "**For Branch " + branchName(branch) + ", " + label + " is N/A.**";
         }
-        return "**" + label + ": " + trim(value) + unit + ".**";
+        return "**For Branch " + branchName(branch) + ", " + label + " is " + trim(value) + unit + ".**";
     }
 
     public String renderActiveDevices(BranchSnapshot branch, List<String> activeSystems) {
-        return "**Active Devices (" + activeSystems.size() + "): " + String.join(", ", activeSystems)
+        return "**For Branch " + branchName(branch) + ", Active Devices (" + activeSystems.size() + "): "
+                + String.join(", ", activeSystems)
                 + ".**";
     }
 
-    public String renderCctvStatus(Integer onlineCameras, Integer totalCameras) {
+    public String renderCctvStatus(BranchSnapshot branch, Integer onlineCameras, Integer totalCameras) {
         if (onlineCameras == null && totalCameras == null) {
-            return "**CCTV Camera Status: N/A.**";
+            return "**For Branch " + branchName(branch) + ", CCTV Camera Status is N/A.**";
         }
         if (totalCameras != null) {
-            return "**CCTV Camera Status: " + onlineCameras + " of " + totalCameras + " cameras are ONLINE.**";
+            return "**For Branch " + branchName(branch) + ", CCTV Camera Status is "
+                    + onlineCameras + " of " + totalCameras + " cameras ONLINE.**";
         }
-        return "**CCTV Camera Status: " + onlineCameras + " cameras are ONLINE.**";
+        return "**For Branch " + branchName(branch) + ", CCTV Camera Status is " + onlineCameras + " cameras ONLINE.**";
     }
 
-    public String renderAlertStatus(String label, int count) {
-        return "**" + label + ": " + count + ".**";
+    public String renderAlertStatus(BranchSnapshot branch, String label, int count) {
+        return "**For Branch " + branchName(branch) + ", " + label + " is " + count + ".**";
     }
 
-    public String renderSubsystemStatus(String displayName, String stateText) {
-        return "**" + displayName + " Status: " + stateText + ".**";
+    public String renderSubsystemStatus(BranchSnapshot branch, String displayName, String stateText) {
+        return "**For Branch " + branchName(branch) + ", " + displayName + " Status is " + stateText + ".**";
+    }
+
+    private String branchName(BranchSnapshot branch) {
+        if (branch == null || branch.getIdentity() == null || branch.getIdentity().getBranchName() == null) {
+            return "Unknown";
+        }
+        String display = branch.getIdentity().getBranchName()
+                .replaceFirst("(?i)^BRANCH\\s+", "")
+                .trim();
+        String technicalId = branch.getIdentity().getTechnicalId();
+        if ("TR".equalsIgnoreCase(display) && technicalId != null
+                && technicalId.toUpperCase().contains("TRENDZ")) {
+            return "TRENDZ";
+        }
+        return display;
     }
 
     private String trim(Double value) {

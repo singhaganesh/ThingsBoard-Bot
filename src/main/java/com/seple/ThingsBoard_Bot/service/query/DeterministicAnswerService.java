@@ -30,16 +30,19 @@ public class DeterministicAnswerService {
                     ? answerTemplateService.renderGatewayStatus(query.getTargetBranch(), formatState(query.getTargetBranch().getGateway().getState()))
                     : null;
             case BATTERY_VOLTAGE -> query.getTargetBranch() != null
-                    ? answerTemplateService.renderMetric("Battery Voltage Reading", query.getTargetBranch().getPower().getBatteryVoltage(), "V DC")
+                    ? answerTemplateService.renderMetric(query.getTargetBranch(), "Battery Voltage Reading",
+                            query.getTargetBranch().getPower().getBatteryVoltage(), "V DC")
                     : null;
             case BATTERY_LOW_STATUS -> query.getTargetBranch() != null
                     ? answerBatteryLowStatus(query.getTargetBranch())
                     : null;
             case AC_VOLTAGE -> query.getTargetBranch() != null
-                    ? answerTemplateService.renderMetric("AC Input Voltage", query.getTargetBranch().getPower().getAcVoltage(), "V AC")
+                    ? answerTemplateService.renderMetric(query.getTargetBranch(), "AC Input Voltage",
+                            query.getTargetBranch().getPower().getAcVoltage(), "V AC")
                     : null;
             case SYSTEM_CURRENT -> query.getTargetBranch() != null
-                    ? answerTemplateService.renderMetric("System Current", query.getTargetBranch().getPower().getSystemCurrent(), " Amp")
+                    ? answerTemplateService.renderMetric(query.getTargetBranch(), "System Current",
+                            query.getTargetBranch().getPower().getSystemCurrent(), " Amp")
                     : null;
             case ACTIVE_DEVICES -> query.getTargetBranch() != null
                     ? answerTemplateService.renderActiveDevices(query.getTargetBranch(), activeSystems(query.getTargetBranch()))
@@ -57,7 +60,9 @@ public class DeterministicAnswerService {
                     ? answerNetworkStatus(query.getTargetBranch())
                     : null;
             case CCTV_STATUS -> query.getTargetBranch() != null
-                    ? answerTemplateService.renderCctvStatus(query.getTargetBranch().getCctv().getOnlineCameraCount(), query.getTargetBranch().getCctv().getCameraCount())
+                    ? answerTemplateService.renderCctvStatus(query.getTargetBranch(),
+                            query.getTargetBranch().getCctv().getOnlineCameraCount(),
+                            query.getTargetBranch().getCctv().getCameraCount())
                     : null;
             case CCTV_HDD_INFO -> query.getTargetBranch() != null
                     ? answerCctvHddInfo(query.getTargetBranch())
@@ -66,10 +71,12 @@ public class DeterministicAnswerService {
                     ? answerCctvRecordingInfo(query.getTargetBranch())
                     : null;
             case ALARM_STATUS -> query.getTargetBranch() != null
-                    ? answerTemplateService.renderAlertStatus("Alarm Count", query.getTargetBranch().getAlerts().getAlarmCount())
+                    ? answerTemplateService.renderAlertStatus(query.getTargetBranch(), "Alarm Count",
+                            query.getTargetBranch().getAlerts().getAlarmCount())
                     : null;
             case ERROR_STATUS -> query.getTargetBranch() != null
-                    ? answerTemplateService.renderAlertStatus("Error Count", query.getTargetBranch().getAlerts().getErrorCount())
+                    ? answerTemplateService.renderAlertStatus(query.getTargetBranch(), "Error Count",
+                            query.getTargetBranch().getAlerts().getErrorCount())
                     : null;
             case SUBSYSTEM_STATUS -> query.getTargetBranch() != null
                     ? answerSubsystemStatus(query.getTargetBranch(), query.getTargetSystem())
@@ -125,7 +132,8 @@ public class DeterministicAnswerService {
             return null;
         }
 
-        return answerTemplateService.renderSubsystemStatus(subsystem.getSystemName(), formatState(subsystem.getState()));
+        return answerTemplateService.renderSubsystemStatus(branch, subsystem.getSystemName(),
+                formatState(subsystem.getState()));
     }
 
     private String answerFaultReason(BranchSnapshot branch) {
@@ -150,10 +158,11 @@ public class DeterministicAnswerService {
         }
 
         if (reasons.isEmpty()) {
-            return "**No modeled fault reason is currently available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", no modeled fault reason is currently available.**";
         }
 
-        return "**" + branch.getIdentity().getBranchName() + " has a fault indication because "
+        return "**For Branch " + branchName(branch) + ", there is a fault indication because "
                 + String.join(", ", reasons) + ".**";
     }
 
@@ -186,24 +195,27 @@ public class DeterministicAnswerService {
 
         if (historical) {
             if (channelsWithHistory.isEmpty()) {
-                return "**No historical camera disconnects found for " + branch.getIdentity().getBranchName() + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", No historical camera disconnects found.**";
             }
-            return "**Historical camera disconnects found for " + branch.getIdentity().getBranchName() + ": "
+            return "**For Branch " + branchName(branch) + ", Historical camera disconnects found: "
                     + String.join(", ", channelsWithHistory) + ".**";
         }
 
         if (!channelsDisconnectedNow.isEmpty()) {
-            return "**CCTV Disconnect Status: " + String.join(", ", channelsDisconnectedNow) + " disconnected.**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV Disconnect Status is: " + String.join(", ", channelsDisconnectedNow) + " disconnected.**";
         }
         if (disconnectCount != null && disconnectCount == 0) {
-            return "**CCTV Disconnect Status: No disconnected cameras detected for "
-                    + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV Disconnect Status is: No disconnected cameras detected.**";
         }
         if (channelsWithHistory.isEmpty()) {
-            return "**No historical camera disconnects found for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", No historical camera disconnects found.**";
         }
-        return "**CCTV Disconnect Status: No disconnected cameras detected for "
-                + branch.getIdentity().getBranchName() + ".**";
+        return "**For Branch " + branchName(branch)
+                + ", CCTV Disconnect Status is: No disconnected cameras detected.**";
     }
 
     private boolean hasHistoryEntries(String rawJson) {
@@ -247,43 +259,52 @@ public class DeterministicAnswerService {
         Boolean batteryLow = resolveBoolean(branch.getRawData(), "BATTERY LOW", "gatewayStatus_BATTERY LOW",
                 "system_status_statusbox_battery_low", "ticketStatus_BATTERY_LOW");
         if (Boolean.TRUE.equals(batteryLow)) {
-            return "**Battery Low Status: WARNING ACTIVE.**";
+            return "**For Branch " + branchName(branch)
+                    + ", Battery Low Status is WARNING ACTIVE.**";
         }
         if (Boolean.FALSE.equals(batteryLow)) {
-            return "**Battery Low Status: NORMAL. No low battery warning is active.**";
+            return "**For Branch " + branchName(branch)
+                    + ", Battery Low Status is NORMAL. No low battery warning is active.**";
         }
-        return "**Battery Low Status: N/A.**";
+        return "**For Branch " + branchName(branch) + ", Battery Low Status is N/A.**";
     }
 
     private String answerFaultDevices(BranchSnapshot branch) {
         List<String> faultDevices = systemsByState(branch, NormalizedState.FAULT);
         if (!faultDevices.isEmpty()) {
-            return "**Fault Devices (" + faultDevices.size() + "): " + String.join(", ", faultDevices) + ".**";
+            return "**For Branch " + branchName(branch) + ", Fault Devices ("
+                    + faultDevices.size() + "): " + String.join(", ", faultDevices) + ".**";
         }
 
         List<String> branchLevelIndicators = branchLevelFaultIndicators(branch);
         if (!branchLevelIndicators.isEmpty()) {
-            return "**No specific fault device is deterministically identified for " + branch.getIdentity().getBranchName()
+            return "**For Branch " + branchName(branch)
+                    + ", no specific fault device is deterministically identified"
                     + ". Branch-level fault indicators are present: " + String.join(", ", branchLevelIndicators) + ".**";
         }
 
-        return "**No fault devices are currently identified for " + branch.getIdentity().getBranchName() + ".**";
+        return "**For Branch " + branchName(branch)
+                + ", no fault devices are currently identified.**";
     }
 
     private String answerOfflineDevices(BranchSnapshot branch) {
         List<String> offlineDevices = systemsByState(branch, NormalizedState.OFFLINE);
         if (offlineDevices.isEmpty()) {
-            return "**No offline devices are currently identified for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", no offline devices are currently identified.**";
         }
-        return "**Offline Devices (" + offlineDevices.size() + "): " + String.join(", ", offlineDevices) + ".**";
+        return "**For Branch " + branchName(branch) + ", Offline Devices ("
+                + offlineDevices.size() + "): " + String.join(", ", offlineDevices) + ".**";
     }
 
     private String answerConnectedDevices(BranchSnapshot branch) {
         List<String> connectedDevices = installedSystems(branch);
         if (connectedDevices.isEmpty()) {
-            return "**No connected devices are currently identified for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", no connected devices are currently identified.**";
         }
-        return "**Connected Devices (" + connectedDevices.size() + "): " + String.join(", ", connectedDevices) + ".**";
+        return "**For Branch " + branchName(branch) + ", Connected Devices ("
+                + connectedDevices.size() + "): " + String.join(", ", connectedDevices) + ".**";
     }
 
     private String answerNetworkStatus(BranchSnapshot branch) {
@@ -292,29 +313,33 @@ public class DeterministicAnswerService {
 
         if (Boolean.TRUE.equals(network)) {
             if (operator != null) {
-                return "**Network Status: ON. Network Operator: " + operator + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", Network Status: ON. Network Operator: " + operator + ".**";
             }
-            return "**Network Status: ON.**";
+            return "**For Branch " + branchName(branch) + ", Network Status: ON.**";
         }
         if (Boolean.FALSE.equals(network)) {
-            return "**Network Status: OFFLINE.**";
+            return "**For Branch " + branchName(branch) + ", Network Status: OFFLINE.**";
         }
         if (operator != null) {
-            return "**Network Status: ON. Network Operator: " + operator + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", Network Status: ON. Network Operator: " + operator + ".**";
         }
-        return "**Network Status: N/A.**";
+        return "**For Branch " + branchName(branch) + ", Network Status: N/A.**";
     }
 
     private String answerCctvHddInfo(BranchSnapshot branch) {
         Object rawInfo = branch.getRawData().get("rock_HddINFO");
         if (rawInfo == null) {
-            return "**CCTV HDD Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV HDD Information is not available.**";
         }
 
         try {
             JsonNode node = objectMapper.readTree(String.valueOf(rawInfo));
             if (!node.isArray() || node.isEmpty()) {
-                return "**CCTV HDD Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", CCTV HDD Information is not available.**";
             }
 
             List<String> slots = new ArrayList<>();
@@ -330,12 +355,15 @@ public class DeterministicAnswerService {
             }
 
             if (slots.isEmpty()) {
-                return "**CCTV HDD Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", CCTV HDD Information is not available.**";
             }
 
-            return "**CCTV HDD Information: " + String.join("; ", slots) + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV HDD Information is: " + String.join("; ", slots) + ".**";
         } catch (Exception ignored) {
-            return "**CCTV HDD Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV HDD Information is not available.**";
         }
     }
 
@@ -345,13 +373,15 @@ public class DeterministicAnswerService {
             rawInfo = branch.getRawData().get("Hikvision_NVR_CameraRecInfo");
         }
         if (rawInfo == null) {
-            return "**CCTV Recording Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV Recording Information is not available.**";
         }
 
         try {
             JsonNode node = objectMapper.readTree(String.valueOf(rawInfo));
             if (!node.isArray() || node.isEmpty()) {
-                return "**CCTV Recording Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", CCTV Recording Information is not available.**";
             }
 
             int withRecording = 0;
@@ -369,7 +399,9 @@ public class DeterministicAnswerService {
                 }
             }
 
-            StringBuilder builder = new StringBuilder("**CCTV Recording Information: ");
+            StringBuilder builder = new StringBuilder("**For Branch ")
+                    .append(branchName(branch))
+                    .append(", CCTV Recording Information is: ");
             builder.append(withRecording).append(" channel(s) have recording data");
             if (!noRecordingChannels.isEmpty()) {
                 builder.append("; no recording data for channel(s) ")
@@ -378,7 +410,8 @@ public class DeterministicAnswerService {
             builder.append(".**");
             return builder.toString();
         } catch (Exception ignored) {
-            return "**CCTV Recording Information is not available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", CCTV Recording Information is not available.**";
         }
     }
 
@@ -386,29 +419,34 @@ public class DeterministicAnswerService {
         if ("timeLock".equals(targetSystem)) {
             String door = firstNonBlank(branch.getRawData(), "timeLockDoor");
             if (door != null) {
-                return "**Time Lock Door Status: " + door.toUpperCase() + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", Time Lock Door Status is " + door.toUpperCase() + ".**";
             }
-            return "**Time Lock Door Status is not available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", Time Lock Door Status is not available.**";
         }
         if ("accessControl".equals(targetSystem)) {
             String door = firstNonBlank(branch.getRawData(), "accessControlDoor");
             if (door != null) {
-                return "**Access Control Door Status: " + door.toUpperCase() + ".**";
+                return "**For Branch " + branchName(branch)
+                        + ", Access Control Door Status is " + door.toUpperCase() + ".**";
             }
-            return "**Access Control Door Status is not available for " + branch.getIdentity().getBranchName() + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", Access Control Door Status is not available.**";
         }
-        return "**Door status is not available for " + branch.getIdentity().getBranchName() + ".**";
+        return "**For Branch " + branchName(branch) + ", Door status is not available.**";
     }
 
     private String answerAccessControlUserCount(BranchSnapshot branch) {
         Integer userCount = firstInteger(branch.getRawData(),
                 "accessControlTotalUsers", "totalUsers", "registeredUsers", "accessControlUserCount", "userCount");
         if (userCount != null) {
-            return "**Access Control User Count: " + userCount + ".**";
+            return "**For Branch " + branchName(branch)
+                    + ", Access Control User Count is " + userCount + ".**";
         }
 
-        return "**Access Control user count is not available in current branch data for "
-                + branch.getIdentity().getBranchName() + ". Current status: "
+        return "**For Branch " + branchName(branch)
+                + ", access control user count is not available in current branch data. Current status is "
                 + formatState(branch.getSubsystems().getAccessControl().getState()) + ".**";
     }
 
@@ -422,8 +460,9 @@ public class DeterministicAnswerService {
 
         if (model == null && firmware == null && ip == null) {
             String suffix = door != null ? " Door: " + door.toUpperCase() + "." : "";
-            return "**Access Control device information is not available in current branch data for "
-                    + branch.getIdentity().getBranchName() + ". Status: " + status + "." + suffix + "**";
+            return "**For Branch " + branchName(branch)
+                    + ", access control device information is not available in current branch data. Status is "
+                    + status + "." + suffix + "**";
         }
 
         List<String> parts = new ArrayList<>();
@@ -440,7 +479,8 @@ public class DeterministicAnswerService {
         if (door != null) {
             parts.add("Door: " + door.toUpperCase());
         }
-        return "**Access Control Device Info: " + String.join(", ", parts) + ".**";
+        return "**For Branch " + branchName(branch)
+                + ", Access Control Device Info is: " + String.join(", ", parts) + ".**";
     }
 
     private List<String> systemsByState(BranchSnapshot branch, NormalizedState targetState) {
@@ -572,5 +612,20 @@ public class DeterministicAnswerService {
             case NOT_INSTALLED -> "NOT INSTALLED";
             case UNKNOWN -> "UNKNOWN";
         };
+    }
+
+    private String branchName(BranchSnapshot branch) {
+        if (branch == null || branch.getIdentity() == null || branch.getIdentity().getBranchName() == null) {
+            return "Unknown";
+        }
+        String display = branch.getIdentity().getBranchName()
+                .replaceFirst("(?i)^BRANCH\\s+", "")
+                .trim();
+        String technicalId = branch.getIdentity().getTechnicalId();
+        if ("TR".equalsIgnoreCase(display) && technicalId != null
+                && technicalId.toUpperCase().contains("TRENDZ")) {
+            return "TRENDZ";
+        }
+        return display;
     }
 }

@@ -128,6 +128,7 @@ public class ChatService {
                     ? deterministicAnswerService.answer(resolvedQuery, snapshots)
                     : null;
             if (deterministicAnswer != null) {
+                deterministicAnswer = normalizeAnswerStyle(deterministicAnswer);
                 logDecision(resolvedQuery, true, 0);
                 chatMemoryService.recordInteraction(sessionId, request.getQuestion(), deterministicAnswer);
                 return ChatResponse.builder()
@@ -147,10 +148,11 @@ public class ChatService {
             }
 
             String userMessage = "Structured Branch Context:\n" + contextJson
-                    + (resolvedQuery.isBranchFromMemory() ? "\nNOTE: The user did not specify a branch, so we are continuing with " + targetBranch.getIdentity().getBranchName() + " from memory. You MUST explicitly name this branch in your response." : "")
+                    + "\nNOTE: You are currently reporting for " + targetBranch.getIdentity().getBranchName() + ". You MUST explicitly name this branch in your response header (e.g. **Branch " + targetBranch.getIdentity().getBranchName() + ": ...**)."
                     + (activeTopic != null ? "\nCRITICAL: The user is following up on a previous question about '" + activeTopic + "'. You MUST ONLY report on this specific topic for the branch." : "")
                     + "\n\nUser Question: " + request.getQuestion();
             String answer = openAIClient.chat(SYSTEM_PROMPT, history, userMessage);
+            answer = normalizeAnswerStyle(answer);
             logDecision(resolvedQuery, false, estimatedTokens);
             chatMemoryService.recordInteraction(sessionId, request.getQuestion(), answer);
 
@@ -201,5 +203,26 @@ public class ChatService {
                 deterministic,
                 query.getConfidence(),
                 tokens);
+    }
+
+    private String normalizeAnswerStyle(String answer) {
+        if (answer == null) {
+            return null;
+        }
+
+        String normalized = answer.trim();
+
+        // Normalize legacy heading style from the LLM fallback:
+        // "Branch XYZ: The <metric> ..."
+        normalized = normalized.replaceAll("(?i)^\\*\\*Branch\\s+([^:]+):\\s*The\\s+", "**For Branch $1, ");
+        normalized = normalized.replaceAll("(?i)^Branch\\s+([^:]+):\\s*The\\s+", "For Branch $1, ");
+
+        // Keep the canonical form consistent.
+        normalized = normalized.replaceAll("(?i)^\\*\\*For\\s+Branch\\s+", "**For Branch ");
+        normalized = normalized.replaceAll("(?i)^For\\s+Branch\\s+", "For Branch ");
+        normalized = normalized.replaceAll("(?i)^\\*\\*For\\s+Branch\\s+BRANCH\\s+", "**For Branch ");
+        normalized = normalized.replaceAll("(?i)^For\\s+Branch\\s+BRANCH\\s+", "For Branch ");
+
+        return normalized;
     }
 }
