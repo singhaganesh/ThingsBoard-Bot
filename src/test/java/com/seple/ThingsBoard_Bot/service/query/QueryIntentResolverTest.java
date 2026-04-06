@@ -162,4 +162,38 @@ class QueryIntentResolverTest {
         assertEquals(true, resolved.isAmbiguous());
         assertEquals(null, resolved.getTargetBranch());
     }
+
+    @Test
+    void shouldResolveLowBatteryPhraseVariant() {
+        ResolvedQuery resolved = resolver.resolve("Is there a low battery warning on the Branch liluah Gateway?", snapshots, null);
+
+        assertEquals(QueryIntent.BATTERY_LOW_STATUS, resolved.getIntent());
+        assertNotNull(resolved.getTargetBranch());
+        assertEquals("BOI-LILUAH", resolved.getTargetBranch().getIdentity().getTechnicalId());
+    }
+
+    @Test
+    void shouldResolveCctvHddErrorQuestion() {
+        ResolvedQuery resolved = resolver.resolve("What is the Branch dankuni CCTV HDD Error right now?", snapshots, null);
+
+        assertEquals(QueryIntent.CCTV_HDD_ERROR_STATUS, resolved.getIntent());
+        assertEquals("cctv", resolved.getTargetSystem());
+        assertNotNull(resolved.getTargetBranch());
+    }
+
+    @Test
+    void shouldResolveSubsystemFaultQuestionForBas() {
+        ResolvedQuery resolved = resolver.resolve("What is the Branch dankuni BAS fault status right now?", snapshots, null);
+
+        assertEquals(QueryIntent.SUBSYSTEM_FAULT_STATUS, resolved.getIntent());
+        assertEquals("bas", resolved.getTargetSystem());
+    }
+
+    @Test
+    void shouldResolveSubsystemAlarmQuestionForTimeLock() {
+        ResolvedQuery resolved = resolver.resolve("What is the Branch dankuni Time Lock alarm status right now?", snapshots, null);
+
+        assertEquals(QueryIntent.SUBSYSTEM_ALARM_STATUS, resolved.getIntent());
+        assertEquals("timeLock", resolved.getTargetSystem());
+    }
 }

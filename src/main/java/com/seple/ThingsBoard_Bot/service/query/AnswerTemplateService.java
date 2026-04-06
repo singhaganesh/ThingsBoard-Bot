@@ -69,6 +69,18 @@ public class AnswerTemplateService {
         return "**For Branch " + branchName(branch) + ", " + displayName + " Status is " + stateText + ".**";
     }
 
+    public String renderSubsystemFaultStatus(BranchSnapshot branch, String displayName, String stateText) {
+        return "**For Branch " + branchName(branch) + ", " + displayName + " Fault Status is " + stateText + ".**";
+    }
+
+    public String renderSubsystemAlarmStatus(BranchSnapshot branch, String displayName, String stateText) {
+        return "**For Branch " + branchName(branch) + ", " + displayName + " Alarm Status is " + stateText + ".**";
+    }
+
+    public String renderCctvHddErrorStatus(BranchSnapshot branch, String stateText) {
+        return "**For Branch " + branchName(branch) + ", CCTV HDD Error Status is " + stateText + ".**";
+    }
+
     private String branchName(BranchSnapshot branch) {
         if (branch == null || branch.getIdentity() == null || branch.getIdentity().getBranchName() == null) {
             return "Unknown";

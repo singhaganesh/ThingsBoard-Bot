@@ -348,4 +348,67 @@ class DeterministicAnswerServiceTest {
         assertTrue(answer.contains("device information is not available"));
         assertTrue(answer.contains("ONLINE"));
     }
+
+    @Test
+    void shouldReturnCctvHddErrorStatusInsteadOfCameraCount() {
+        BranchSnapshot target = snapshots.stream()
+                .filter(snapshot -> "BOI-DANKUNI".equals(snapshot.getIdentity().getTechnicalId()))
+                .findFirst()
+                .orElseThrow();
+
+        ResolvedQuery query = ResolvedQuery.builder()
+                .intent(QueryIntent.CCTV_HDD_ERROR_STATUS)
+                .targetBranch(target)
+                .targetSystem("cctv")
+                .deterministic(true)
+                .confidence(1.0)
+                .build();
+
+        String answer = answerService.answer(query, snapshots);
+
+        assertTrue(answer.contains("CCTV HDD Error Status"));
+        assertTrue(answer.contains("NORMAL"));
+    }
+
+    @Test
+    void shouldReturnNotInstalledForTimeLockAlarmStatus() {
+        BranchSnapshot target = snapshots.stream()
+                .filter(snapshot -> "BOI-DANKUNI".equals(snapshot.getIdentity().getTechnicalId()))
+                .findFirst()
+                .orElseThrow();
+
+        ResolvedQuery query = ResolvedQuery.builder()
+                .intent(QueryIntent.SUBSYSTEM_ALARM_STATUS)
+                .targetBranch(target)
+                .targetSystem("timeLock")
+                .deterministic(true)
+                .confidence(1.0)
+                .build();
+
+        String answer = answerService.answer(query, snapshots);
+
+        assertTrue(answer.contains("Time Lock Alarm Status"));
+        assertTrue(answer.contains("NOT INSTALLED"));
+    }
+
+    @Test
+    void shouldReturnNotInstalledForAccessControlAlarmStatus() {
+        BranchSnapshot target = snapshots.stream()
+                .filter(snapshot -> "BOI-DANKUNI".equals(snapshot.getIdentity().getTechnicalId()))
+                .findFirst()
+                .orElseThrow();
+
+        ResolvedQuery query = ResolvedQuery.builder()
+                .intent(QueryIntent.SUBSYSTEM_ALARM_STATUS)
+                .targetBranch(target)
+                .targetSystem("accessControl")
+                .deterministic(true)
+                .confidence(1.0)
+                .build();
+
+        String answer = answerService.answer(query, snapshots);
+
+        assertTrue(answer.contains("Access Control Alarm Status"));
+        assertTrue(answer.contains("NOT INSTALLED"));
+    }
 }

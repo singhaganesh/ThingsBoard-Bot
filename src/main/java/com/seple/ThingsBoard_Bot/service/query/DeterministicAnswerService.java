@@ -64,6 +64,9 @@ public class DeterministicAnswerService {
                             query.getTargetBranch().getCctv().getOnlineCameraCount(),
                             query.getTargetBranch().getCctv().getCameraCount())
                     : null;
+            case CCTV_HDD_ERROR_STATUS -> query.getTargetBranch() != null
+                    ? answerCctvHddErrorStatus(query.getTargetBranch())
+                    : null;
             case CCTV_HDD_INFO -> query.getTargetBranch() != null
                     ? answerCctvHddInfo(query.getTargetBranch())
                     : null;
@@ -77,6 +80,12 @@ public class DeterministicAnswerService {
             case ERROR_STATUS -> query.getTargetBranch() != null
                     ? answerTemplateService.renderAlertStatus(query.getTargetBranch(), "Error Count",
                             query.getTargetBranch().getAlerts().getErrorCount())
+                    : null;
+            case SUBSYSTEM_FAULT_STATUS -> query.getTargetBranch() != null
+                    ? answerSubsystemFaultStatus(query.getTargetBranch(), query.getTargetSystem())
+                    : null;
+            case SUBSYSTEM_ALARM_STATUS -> query.getTargetBranch() != null
+                    ? answerSubsystemAlarmStatus(query.getTargetBranch(), query.getTargetSystem())
                     : null;
             case SUBSYSTEM_STATUS -> query.getTargetBranch() != null
                     ? answerSubsystemStatus(query.getTargetBranch(), query.getTargetSystem())
@@ -134,6 +143,134 @@ public class DeterministicAnswerService {
 
         return answerTemplateService.renderSubsystemStatus(branch, subsystem.getSystemName(),
                 formatState(subsystem.getState()));
+    }
+
+    private String answerSubsystemFaultStatus(BranchSnapshot branch, String targetSystem) {
+        SubsystemStatus subsystem = subsystemByTarget(branch, targetSystem);
+        if (subsystem == null) {
+            return "**For Branch " + branchName(branch) + ", subsystem fault status is not available.**";
+        }
+        if (subsystem.getState() == NormalizedState.NOT_INSTALLED || !subsystem.isInstalled()) {
+            return answerTemplateService.renderSubsystemFaultStatus(branch, subsystem.getSystemName(), "NOT INSTALLED");
+        }
+
+        Boolean fault = resolveSubsystemFault(branch, targetSystem);
+        if (Boolean.TRUE.equals(fault)) {
+            return answerTemplateService.renderSubsystemFaultStatus(branch, subsystem.getSystemName(), "ACTIVE");
+        }
+        if (Boolean.FALSE.equals(fault)) {
+            return answerTemplateService.renderSubsystemFaultStatus(branch, subsystem.getSystemName(), "NORMAL");
+        }
+        return answerTemplateService.renderSubsystemFaultStatus(branch, subsystem.getSystemName(), "N/A");
+    }
+
+    private String answerSubsystemAlarmStatus(BranchSnapshot branch, String targetSystem) {
+        SubsystemStatus subsystem = subsystemByTarget(branch, targetSystem);
+        if (subsystem == null) {
+            return "**For Branch " + branchName(branch) + ", subsystem alarm status is not available.**";
+        }
+        if (subsystem.getState() == NormalizedState.NOT_INSTALLED || !subsystem.isInstalled()) {
+            return answerTemplateService.renderSubsystemAlarmStatus(branch, subsystem.getSystemName(), "NOT INSTALLED");
+        }
+
+        Boolean alarm = resolveSubsystemAlarm(branch, targetSystem);
+        if (Boolean.TRUE.equals(alarm)) {
+            return answerTemplateService.renderSubsystemAlarmStatus(branch, subsystem.getSystemName(), "ACTIVE");
+        }
+        if (Boolean.FALSE.equals(alarm)) {
+            return answerTemplateService.renderSubsystemAlarmStatus(branch, subsystem.getSystemName(), "NORMAL");
+        }
+        return answerTemplateService.renderSubsystemAlarmStatus(branch, subsystem.getSystemName(), "N/A");
+    }
+
+    private String answerCctvHddErrorStatus(BranchSnapshot branch) {
+        Boolean hddError = resolveBoolean(branch.getRawData(),
+                "HDD ERROR", "ticketStatus_HDD_ERROR", "cameraStatus_HDD ERROR");
+        if (hddError == null) {
+            String hddHealth = firstNonBlank(branch.getRawData(), "hddStatus");
+            if (hddHealth != null) {
+                hddError = "HEALTHY".equalsIgnoreCase(hddHealth) ? Boolean.FALSE : null;
+            }
+        }
+        if (Boolean.TRUE.equals(hddError)) {
+            return answerTemplateService.renderCctvHddErrorStatus(branch, "ACTIVE");
+        }
+        if (Boolean.FALSE.equals(hddError)) {
+            return answerTemplateService.renderCctvHddErrorStatus(branch, "NORMAL");
+        }
+        return answerTemplateService.renderCctvHddErrorStatus(branch, "N/A");
+    }
+
+    private SubsystemStatus subsystemByTarget(BranchSnapshot branch, String targetSystem) {
+        if (targetSystem == null) {
+            return null;
+        }
+        return switch (targetSystem) {
+            case "ias" -> branch.getSubsystems().getIas();
+            case "bas" -> branch.getSubsystems().getBas();
+            case "fas" -> branch.getSubsystems().getFas();
+            case "timeLock" -> branch.getSubsystems().getTimeLock();
+            case "accessControl" -> branch.getSubsystems().getAccessControl();
+            case "cctv" -> branch.getSubsystems().getCctv();
+            default -> null;
+        };
+    }
+
+    private Boolean resolveSubsystemFault(BranchSnapshot branch, String targetSystem) {
+        Map<String, Object> raw = branch.getRawData();
+        return switch (targetSystem) {
+            case "ias" -> resolveBoolean(raw,
+                    "ticketStatus_IAS_FAULT", "intrusion_alarm_system_fault",
+                    "INTRUSION ALARM SYSTEM FAULT", "iasBasFasStatus_INTRUSION ALARM SYSTEM FAULT");
+            case "bas" -> resolveFromCount(raw, "BASfaultCOUNT");
+            case "fas" -> resolveBoolean(raw,
+                    "ticketStatus_FAS_FAULT", "fireAlarmSystem_fault", "FIRE ALARM SYSTEM FAULT",
+                    "fire_alarm_system_fault", "iasBasFasStatus_FIRE ALARM SYSTEM FAULT");
+            case "timeLock" -> resolveBoolean(raw,
+                    "ticketStatus_TLS_TAMPER", "ticketStatus_TLS_OFF");
+            case "accessControl" -> resolveBoolean(raw,
+                    "ticketStatus_ACS_TAMPER", "ticketStatus_ACS_OFF");
+            case "cctv" -> resolveBoolean(raw,
+                    "HDD ERROR", "ticketStatus_HDD_ERROR", "ticketStatus_NVR_OFF", "cameraStatus_HDD ERROR");
+            default -> null;
+        };
+    }
+
+    private Boolean resolveSubsystemAlarm(BranchSnapshot branch, String targetSystem) {
+        Map<String, Object> raw = branch.getRawData();
+        return switch (targetSystem) {
+            case "ias" -> resolveBoolean(raw,
+                    "ticketStatus_IAS_ACTIVATE", "ticketStatus_IAS_INT_ACTIVATE",
+                    "INTRUSION ALARM SYSTEM ACTIVATE", "iasBasFasStatus_INTRUSION ALARM SYSTEM ACTIVATE");
+            case "bas" -> null;
+            case "fas" -> resolveBoolean(raw,
+                    "ticketStatus_FAS_ACTIVATE", "FIRE ALARM SYSTEM ACTIVATE",
+                    "iasBasFasStatus_FIRE ALARM SYSTEM ACTIVATE");
+            case "timeLock" -> {
+                Boolean doorOpenAlarm = resolveBoolean(raw, "ticketStatus_TLS_DOOR_OPEN");
+                if (doorOpenAlarm != null) {
+                    yield doorOpenAlarm;
+                }
+                yield resolveFromCount(raw, "time_lock_door_open_count");
+            }
+            case "accessControl" -> {
+                Boolean doorOpenAlarm = resolveBoolean(raw, "ticketStatus_ACS_DOOR_OPEN");
+                if (doorOpenAlarm != null) {
+                    yield doorOpenAlarm;
+                }
+                yield resolveFromCount(raw, "access_control_door_open_count");
+            }
+            case "cctv" -> resolveBoolean(raw, "CAMERA DISCONNECT", "ticketStatus_CAM_DIS", "ticketStatus_CAM_TAMPER");
+            default -> null;
+        };
+    }
+
+    private Boolean resolveFromCount(Map<String, Object> raw, String key) {
+        Integer count = toInt(raw.get(key));
+        if (count == null) {
+            return null;
+        }
+        return count > 0;
     }
 
     private String answerFaultReason(BranchSnapshot branch) {

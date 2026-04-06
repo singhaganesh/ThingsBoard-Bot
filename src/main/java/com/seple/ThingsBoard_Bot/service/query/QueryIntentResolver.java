@@ -114,7 +114,7 @@ public class QueryIntentResolver {
 
     private QueryIntent detectIntent(String normalizedQuestion, boolean hasTargetBranch) {
         String question = normalizedQuestion.toUpperCase(Locale.ROOT);
-        if (question.contains("BATTERY LOW")) {
+        if (isBatteryLowQuestion(question)) {
             return QueryIntent.BATTERY_LOW_STATUS;
         }
         if (question.contains("ACCESS CONTROL") && question.contains("USER")) {
@@ -153,6 +153,16 @@ public class QueryIntentResolver {
         }
         if (question.contains("NETWORK")) {
             return QueryIntent.NETWORK_STATUS;
+        }
+        if ((question.contains("CCTV") || question.contains("CAMERA")) && question.contains("HDD")
+                && (question.contains("ERROR") || question.contains("FAULT"))) {
+            return QueryIntent.CCTV_HDD_ERROR_STATUS;
+        }
+        if (isSubsystemFaultQuestion(question)) {
+            return QueryIntent.SUBSYSTEM_FAULT_STATUS;
+        }
+        if (isSubsystemAlarmQuestion(question)) {
+            return QueryIntent.SUBSYSTEM_ALARM_STATUS;
         }
         if ((question.contains("CCTV") || question.contains("CAMERA")) && question.contains("HDD")
                 && (question.contains("INFO") || question.contains("DETAIL"))) {
@@ -195,6 +205,35 @@ public class QueryIntentResolver {
             return QueryIntent.GATEWAY_STATUS;
         }
         return QueryIntent.GENERAL_LLM;
+    }
+
+    private boolean isBatteryLowQuestion(String question) {
+        return question.contains("BATTERY LOW")
+                || question.contains("LOW BATTERY")
+                || (question.contains("BATTERY") && question.contains("LOW") && question.contains("WARNING"));
+    }
+
+    private boolean isSubsystemFaultQuestion(String question) {
+        if (!question.contains("FAULT") && !question.contains("ERROR")) {
+            return false;
+        }
+        return containsSubsystemKeyword(question)
+                || question.contains("FIRE ALARM SYSTEM")
+                || question.contains("INTRUSION ALARM SYSTEM")
+                || question.contains("ACCESS CONTROL SYSTEM")
+                || question.contains("TIME LOCK");
+    }
+
+    private boolean isSubsystemAlarmQuestion(String question) {
+        if (!question.contains("ALARM")) {
+            return false;
+        }
+        // Do not collapse "fire alarm system" into branch-level alarm count intent.
+        return containsSubsystemKeyword(question)
+                || question.contains("FIRE ALARM SYSTEM")
+                || question.contains("INTRUSION ALARM SYSTEM")
+                || question.contains("ACCESS CONTROL SYSTEM")
+                || question.contains("TIME LOCK");
     }
 
     private boolean isGlobalQuestion(String normalizedQuestion, boolean hasTargetBranch) {
@@ -250,11 +289,14 @@ public class QueryIntentResolver {
                     SYSTEM_CURRENT,
                     NETWORK_STATUS,
                     CCTV_STATUS,
+                    CCTV_HDD_ERROR_STATUS,
                     CCTV_HDD_INFO,
                     CCTV_RECORDING_INFO,
                     CAMERA_DISCONNECT_HISTORY,
                     ALARM_STATUS,
                     ERROR_STATUS,
+                    SUBSYSTEM_FAULT_STATUS,
+                    SUBSYSTEM_ALARM_STATUS,
                     SUBSYSTEM_STATUS,
                     ACTIVE_DEVICES,
                     CONNECTED_DEVICES,
