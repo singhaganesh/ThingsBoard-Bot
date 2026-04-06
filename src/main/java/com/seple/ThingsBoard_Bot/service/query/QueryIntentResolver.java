@@ -38,6 +38,13 @@ public class QueryIntentResolver {
         QueryIntent intent = detectIntent(normalizedQuestion, targetBranch != null);
         boolean global = isGlobalQuestion(normalizedQuestion, targetBranch != null);
 
+        // Option A: metric questions must be branch-specific.
+        // If user asks a metric without a branch (including "all branch ..."),
+        // force clarification instead of falling back to global overview.
+        if (targetBranch == null && isBranchMetricIntent(intent)) {
+            global = false;
+        }
+
         // AMBIGUITY DETECTION: If no branch found anywhere, NOT explicitly global, and NOT a general conversation
         boolean ambiguous = targetBranch == null && !global && intent != QueryIntent.GENERAL_LLM;
 
@@ -107,10 +114,6 @@ public class QueryIntentResolver {
 
     private QueryIntent detectIntent(String normalizedQuestion, boolean hasTargetBranch) {
         String question = normalizedQuestion.toUpperCase(Locale.ROOT);
-
-        if (isGlobalQuestion(question, hasTargetBranch)) {
-            return QueryIntent.GLOBAL_OVERVIEW;
-        }
         if (question.contains("BATTERY LOW")) {
             return QueryIntent.BATTERY_LOW_STATUS;
         }
@@ -182,6 +185,11 @@ public class QueryIntentResolver {
         if (containsSubsystemKeyword(question)) {
             return QueryIntent.SUBSYSTEM_STATUS;
         }
+        // Keep branch/device global-status prompts global (e.g. "status of all devices in all branches"),
+        // but metric prompts are already handled above and Option A forces clarification.
+        if (isGlobalQuestion(question, hasTargetBranch)) {
+            return QueryIntent.GLOBAL_OVERVIEW;
+        }
         if (question.contains("GATEWAY") || question.contains("STATUS") || question.contains("WORKING PROPERLY")
                 || question.contains("ONLINE") || question.contains("OFFLINE")) {
             return QueryIntent.GATEWAY_STATUS;
@@ -232,5 +240,30 @@ public class QueryIntentResolver {
             return "cctv";
         }
         return null;
+    }
+
+    private boolean isBranchMetricIntent(QueryIntent intent) {
+        return switch (intent) {
+            case BATTERY_VOLTAGE,
+                    BATTERY_LOW_STATUS,
+                    AC_VOLTAGE,
+                    SYSTEM_CURRENT,
+                    NETWORK_STATUS,
+                    CCTV_STATUS,
+                    CCTV_HDD_INFO,
+                    CCTV_RECORDING_INFO,
+                    CAMERA_DISCONNECT_HISTORY,
+                    ALARM_STATUS,
+                    ERROR_STATUS,
+                    SUBSYSTEM_STATUS,
+                    ACTIVE_DEVICES,
+                    CONNECTED_DEVICES,
+                    OFFLINE_DEVICES,
+                    FAULT_DEVICES,
+                    DOOR_STATUS,
+                    ACCESS_CONTROL_USER_COUNT,
+                    ACCESS_CONTROL_DEVICE_INFO -> true;
+            default -> false;
+        };
     }
 }

@@ -142,4 +142,24 @@ class QueryIntentResolverTest {
         assertEquals(true, resolved.isGlobal());
         assertEquals(null, resolved.getTargetBranch());
     }
+
+    @Test
+    void shouldAskBranchClarificationForAllBranchBatteryVoltage() {
+        ResolvedQuery resolved = resolver.resolve("all Branch Battery Voltage?", snapshots, null);
+
+        assertEquals(QueryIntent.BATTERY_VOLTAGE, resolved.getIntent());
+        assertEquals(false, resolved.isGlobal());
+        assertEquals(true, resolved.isAmbiguous());
+        assertEquals(null, resolved.getTargetBranch());
+    }
+
+    @Test
+    void shouldAskBranchClarificationForAllBranchAcVoltage() {
+        ResolvedQuery resolved = resolver.resolve("all Branch AC Voltage?", snapshots, null);
+
+        assertEquals(QueryIntent.AC_VOLTAGE, resolved.getIntent());
+        assertEquals(false, resolved.isGlobal());
+        assertEquals(true, resolved.isAmbiguous());
+        assertEquals(null, resolved.getTargetBranch());
+    }
 }

@@ -13,6 +13,7 @@ import com.seple.ThingsBoard_Bot.model.dto.ChatMessage;
 import com.seple.ThingsBoard_Bot.model.dto.ChatRequest;
 import com.seple.ThingsBoard_Bot.model.dto.ChatResponse;
 import com.seple.ThingsBoard_Bot.service.query.DeterministicAnswerService;
+import com.seple.ThingsBoard_Bot.service.query.QueryIntent;
 import com.seple.ThingsBoard_Bot.service.query.QueryIntentResolver;
 import com.seple.ThingsBoard_Bot.service.query.ResolvedQuery;
 import com.seple.ThingsBoard_Bot.util.StructuredContextBuilder;
@@ -115,7 +116,8 @@ public class ChatService {
                 activeTopic = chatMemoryService.getPendingTopic(sessionId);
                 if (activeTopic != null) {
                     log.info("Applying pending topic '{}' to branch {}", activeTopic, resolvedQuery.getTargetBranch().getIdentity().getBranchName());
-                    chatMemoryService.setPendingTopic(sessionId, null); 
+                    resolvedQuery = applyPendingTopic(resolvedQuery, activeTopic);
+                    chatMemoryService.setPendingTopic(sessionId, null);
                 }
             }
 
@@ -224,5 +226,79 @@ public class ChatService {
         normalized = normalized.replaceAll("(?i)^For\\s+Branch\\s+BRANCH\\s+", "For Branch ");
 
         return normalized;
+    }
+
+    private ResolvedQuery applyPendingTopic(ResolvedQuery base, String pendingTopic) {
+        QueryIntent intent = mapPendingTopicToIntent(pendingTopic);
+        if (intent == null) {
+            return base;
+        }
+
+        String targetSystem = mapPendingTopicToTargetSystem(pendingTopic, intent, base.getTargetSystem());
+        return ResolvedQuery.builder()
+                .intent(intent)
+                .originalQuestion(base.getOriginalQuestion())
+                .targetBranch(base.getTargetBranch())
+                .targetSystem(targetSystem)
+                .global(false)
+                .ambiguous(false)
+                .branchFromMemory(base.isBranchFromMemory())
+                .deterministic(base.getTargetBranch() != null)
+                .confidence(Math.max(base.getConfidence(), 0.95))
+                .build();
+    }
+
+    private QueryIntent mapPendingTopicToIntent(String pendingTopic) {
+        if (pendingTopic == null || pendingTopic.isBlank()) {
+            return null;
+        }
+
+        String normalized = pendingTopic.trim().toUpperCase().replace(' ', '_');
+        try {
+            return QueryIntent.valueOf(normalized);
+        } catch (IllegalArgumentException ignored) {
+            // Fall through to topic aliases.
+        }
+
+        return switch (pendingTopic.trim().toLowerCase()) {
+            case "battery", "battery_voltage" -> QueryIntent.BATTERY_VOLTAGE;
+            case "ac", "ac_voltage" -> QueryIntent.AC_VOLTAGE;
+            case "system_current", "current" -> QueryIntent.SYSTEM_CURRENT;
+            case "battery_low", "battery_low_status" -> QueryIntent.BATTERY_LOW_STATUS;
+            case "network", "network_status" -> QueryIntent.NETWORK_STATUS;
+            case "cctv", "camera", "camera_status", "cctv_status" -> QueryIntent.CCTV_STATUS;
+            case "camera_disconnect_history", "disconnect_history" -> QueryIntent.CAMERA_DISCONNECT_HISTORY;
+            case "alarm", "alarm_status" -> QueryIntent.ALARM_STATUS;
+            case "error", "error_status" -> QueryIntent.ERROR_STATUS;
+            case "fault_devices" -> QueryIntent.FAULT_DEVICES;
+            case "offline_devices" -> QueryIntent.OFFLINE_DEVICES;
+            case "connected_devices" -> QueryIntent.CONNECTED_DEVICES;
+            case "active_devices" -> QueryIntent.ACTIVE_DEVICES;
+            case "fault_reason" -> QueryIntent.FAULT_REASON;
+            case "door_status" -> QueryIntent.DOOR_STATUS;
+            case "access_control_user_count" -> QueryIntent.ACCESS_CONTROL_USER_COUNT;
+            case "access_control_device_info" -> QueryIntent.ACCESS_CONTROL_DEVICE_INFO;
+            case "ias", "bas", "fas", "timelock", "accesscontrol" -> QueryIntent.SUBSYSTEM_STATUS;
+            default -> null;
+        };
+    }
+
+    private String mapPendingTopicToTargetSystem(String pendingTopic, QueryIntent intent, String currentTargetSystem) {
+        if (intent != QueryIntent.SUBSYSTEM_STATUS && intent != QueryIntent.DOOR_STATUS) {
+            return currentTargetSystem;
+        }
+        if (pendingTopic == null || pendingTopic.isBlank()) {
+            return currentTargetSystem;
+        }
+
+        return switch (pendingTopic.trim().toLowerCase()) {
+            case "ias" -> "ias";
+            case "bas" -> "bas";
+            case "fas" -> "fas";
+            case "timelock", "time_lock", "door_status" -> "timeLock";
+            case "accesscontrol", "access_control", "access control" -> "accessControl";
+            case "cctv", "camera" -> "cctv";
+            default -> currentTargetSystem;
+        };
     }
 }

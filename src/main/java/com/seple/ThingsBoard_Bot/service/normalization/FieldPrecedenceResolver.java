@@ -34,17 +34,13 @@ public class FieldPrecedenceResolver {
         Double gatewayVoltage = valueNormalizer.toDouble(raw.get("gatewayStatus_battery_voltage"));
         Double batteryVoltage = valueNormalizer.toDouble(raw.get("battery_status_battery_voltage"));
 
-        if (gatewayVoltage != null && gatewayVoltage > 0) {
-            return new ResolvedMetric(gatewayVoltage, "gatewayStatus_battery_voltage");
-        }
-        if (batteryVoltage != null && batteryVoltage > 0) {
+        // User-requested precedence: use battery_status_battery_voltage for battery questions.
+        // Keep gatewayStatus_battery_voltage only as fallback when battery_status is absent/unparseable.
+        if (batteryVoltage != null) {
             return new ResolvedMetric(batteryVoltage, "battery_status_battery_voltage");
         }
         if (gatewayVoltage != null) {
             return new ResolvedMetric(gatewayVoltage, "gatewayStatus_battery_voltage");
-        }
-        if (batteryVoltage != null) {
-            return new ResolvedMetric(batteryVoltage, "battery_status_battery_voltage");
         }
         return new ResolvedMetric(null, null);
     }

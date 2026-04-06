@@ -26,12 +26,12 @@ class BranchSnapshotMapperTest {
     }
 
     @Test
-    void shouldPreferGatewayBatteryVoltageWhenRawBatteryVoltageIsZero() {
+    void shouldPreferBatteryStatusBatteryVoltageEvenWhenItIsZero() {
         BranchSnapshot snapshot = mapper.map(branches.get("BOI-CHANDANNAGAR"));
 
         assertEquals("BRANCH CHANDANNAGAR", snapshot.getIdentity().getBranchName());
-        assertEquals(13.0, snapshot.getPower().getBatteryVoltage());
-        assertEquals("gatewayStatus_battery_voltage", snapshot.getPower().getBatteryVoltageSource());
+        assertEquals(0.0, snapshot.getPower().getBatteryVoltage());
+        assertEquals("battery_status_battery_voltage", snapshot.getPower().getBatteryVoltageSource());
     }
 
     @Test
