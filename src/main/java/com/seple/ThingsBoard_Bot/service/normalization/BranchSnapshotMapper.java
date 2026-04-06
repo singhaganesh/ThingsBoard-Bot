@@ -63,6 +63,10 @@ public class BranchSnapshotMapper {
 
     private BranchIdentity buildIdentity(Map<String, Object> raw) {
         String branchName = choose(raw, "branchName", "formattedBranchName", "device_name", "deviceName");
+        if (branchName != null) {
+            branchName = branchName.toUpperCase().trim();
+        }
+        
         String technicalId = choose(raw, "device_name", "deviceName", "formattedBranchName", "branchName");
         String deviceId = stringValue(raw.get("device_id"));
         String branchId = stringValue(raw.get("branch_id"));
