@@ -29,6 +29,7 @@ public class ChatMemoryService {
     // Maps a userToken to the list of device names they are currently discussing
     private final Map<String, List<String>> activeDevices = new ConcurrentHashMap<>();
     private final Map<String, String> activeBranch = new ConcurrentHashMap<>();
+    private final Map<String, String> pendingTopic = new ConcurrentHashMap<>();
     
     // Maximum number of messages to remember per user (2 Q&A pairs = 4 messages)
     private static final int MAX_HISTORY_MESSAGES = 4;
@@ -102,6 +103,7 @@ public class ChatMemoryService {
             chatHistory.remove(sessionId);
             activeDevices.remove(sessionId);
             activeBranch.remove(sessionId);
+            pendingTopic.remove(sessionId);
             log.debug("Cleared history and active devices for session '{}'", sessionId);
         }
     }
@@ -138,5 +140,20 @@ public class ChatMemoryService {
             return null;
         }
         return activeBranch.get(sessionId);
+    }
+
+    public void setPendingTopic(String sessionId, String topic) {
+        if (sessionId != null) {
+            if (topic == null) {
+                pendingTopic.remove(sessionId);
+            } else {
+                pendingTopic.put(sessionId, topic);
+            }
+            log.debug("Set pending topic for session '{}' to {}", sessionId, topic);
+        }
+    }
+
+    public String getPendingTopic(String sessionId) {
+        return sessionId == null ? null : pendingTopic.get(sessionId);
     }
 }

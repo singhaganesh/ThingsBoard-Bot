@@ -24,61 +24,58 @@ public class QueryIntentResolver {
         String compactQuestion = branchAliasIndex.compact(question);
         Map<String, BranchSnapshot> aliasIndex = branchAliasIndex.build(snapshots);
         boolean explicitGlobalQuestion = hasGlobalMarkers(normalizedQuestion);
-        BranchSnapshot targetBranch = findBranch(normalizedQuestion, compactQuestion, aliasIndex, activeBranchAlias,
-                explicitGlobalQuestion);
-        boolean global = isGlobalQuestion(normalizedQuestion, targetBranch != null);
-        QueryIntent intent = detectIntent(normalizedQuestion, targetBranch != null);
-        boolean deterministic = intent != QueryIntent.GENERAL_LLM;
-        double confidence = targetBranch != null || global ? 0.95 : 0.55;
-
-        if (intent == QueryIntent.SUBSYSTEM_STATUS || intent == QueryIntent.DOOR_STATUS) {
-            return ResolvedQuery.builder()
-                    .intent(intent)
-                    .originalQuestion(question)
-                    .targetBranch(targetBranch)
-                    .targetSystem(detectSubsystem(normalizedQuestion))
-                    .global(false)
-                    .deterministic(targetBranch != null)
-                    .confidence(confidence)
-                    .build();
+        
+        // Find if branch is in the question
+        BranchSnapshot targetBranch = findBranchInQuestion(normalizedQuestion, compactQuestion, aliasIndex);
+        boolean branchFromMemory = false;
+        
+        // If not in question, try memory
+        if (targetBranch == null && !explicitGlobalQuestion && activeBranchAlias != null && !activeBranchAlias.isBlank()) {
+            targetBranch = findBranchInMemory(activeBranchAlias, aliasIndex);
+            branchFromMemory = (targetBranch != null);
         }
+
+        QueryIntent intent = detectIntent(normalizedQuestion, targetBranch != null);
+        boolean global = isGlobalQuestion(normalizedQuestion, targetBranch != null);
+
+        // AMBIGUITY DETECTION: If no branch found anywhere, NOT explicitly global, and NOT a general conversation
+        boolean ambiguous = targetBranch == null && !global && intent != QueryIntent.GENERAL_LLM;
+
+        boolean deterministic = intent != QueryIntent.GENERAL_LLM;
+        double confidence = targetBranch != null || global || ambiguous ? 0.95 : 0.55;
 
         return ResolvedQuery.builder()
                 .intent(intent)
                 .originalQuestion(question)
                 .targetBranch(targetBranch)
+                .targetSystem(detectSubsystem(normalizedQuestion))
                 .global(global)
+                .ambiguous(ambiguous)
+                .branchFromMemory(branchFromMemory)
                 .deterministic(deterministic && (global || targetBranch != null))
                 .confidence(confidence)
                 .build();
     }
 
-    private BranchSnapshot findBranch(String normalizedQuestion, String compactQuestion,
-            Map<String, BranchSnapshot> aliasIndex, String activeBranchAlias, boolean explicitGlobalQuestion) {
+    private BranchSnapshot findBranchInQuestion(String normalizedQuestion, String compactQuestion, Map<String, BranchSnapshot> aliasIndex) {
         List<String> aliases = aliasIndex.keySet().stream()
                 .sorted((left, right) -> Integer.compare(right.length(), left.length()))
                 .toList();
 
         for (String alias : aliases) {
-            if (alias.isBlank()) {
-                continue;
-            }
-            if (isWeakAlias(alias)) {
-                continue;
-            }
-            if (matchesExplicitAlias(normalizedQuestion, compactQuestion, alias)) {
+            if (!alias.isBlank() && !isWeakAlias(alias) && matchesExplicitAlias(normalizedQuestion, compactQuestion, alias)) {
                 return aliasIndex.get(alias);
             }
         }
+        return null;
+    }
 
-        if (!explicitGlobalQuestion && activeBranchAlias != null && !activeBranchAlias.isBlank()) {
-            for (String variant : branchAliasIndex.aliasVariants(activeBranchAlias)) {
-                if (aliasIndex.containsKey(variant)) {
-                    return aliasIndex.get(variant);
-                }
+    private BranchSnapshot findBranchInMemory(String activeBranchAlias, Map<String, BranchSnapshot> aliasIndex) {
+        for (String variant : branchAliasIndex.aliasVariants(activeBranchAlias)) {
+            if (aliasIndex.containsKey(variant)) {
+                return aliasIndex.get(variant);
             }
         }
-
         return null;
     }
 
@@ -237,4 +234,3 @@ public class QueryIntentResolver {
         return null;
     }
 }
-

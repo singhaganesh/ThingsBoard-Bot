@@ -25,15 +25,25 @@ import lombok.extern.slf4j.Slf4j;
 public class ChatService {
 
     private static final String SYSTEM_PROMPT = """
-            You are SAI (Smart Assistant for IoT), a Senior Security Analyst for bank branch monitoring.
-            Use the provided structured branch context exactly as the source of truth.
+            You are SAI (Smart Assistant for IoT), a Senior Security Analyst.
+            Every response MUST be self-descriptive so the user knows the Branch and the Metric being reported.
 
-            RULES
-            1. Always use the word \"Branch\" for bank branches.
-            2. Treat NOT_INSTALLED as \"Not Installed\", not offline.
-            3. Do not invent branches, statuses, or metrics that are not present in the context.
-            4. Start directly with the answer. No greetings.
-            5. Prefer concise, operational wording.
+            MANDATORY HEADER RULES
+            1. Every response MUST start with a bold line following this pattern:
+               **Branch [NAME]: The [Metric Name] is [Value].**
+            2. Never give a "naked" value. Always anchor it to the Branch name.
+            3. Always use the word "Branch" (e.g. Branch BALLY BAZAR).
+
+            MANDATORY RESPONSE TEMPLATES
+            - GATEWAY: **Branch [NAME]: The Gateway status is currently [ONLINE/OFFLINE].**
+            - VOLTAGE: **Branch [NAME]: The [Battery/AC] Voltage Reading is [Value]V [AC/DC].**
+            - SYSTEMS: **Branch [NAME]: The [IAS/BAS/FAS] Status is [Status].**
+            - CCTV: **Branch [NAME]: The CCTV Camera Status is [X] cameras ONLINE.**
+
+            REASONING & MEMORY
+            - If you are answering based on conversational history (memory), you MUST explicitly state: "Continuing report for Branch [Name]:" or "For Branch [Name]:".
+            - N/A POLICY: Report "N/A" as "Offline" or "Not Installed".
+            - NO FLUFF: Start directly with the bold anchor line.
             """;
 
     private final UserDataService userDataService;
@@ -74,6 +84,41 @@ public class ChatService {
             ResolvedQuery resolvedQuery = queryIntentResolver.resolve(request.getQuestion(), snapshots,
                     chatMemoryService.getActiveBranch(sessionId));
 
+            // UNIVERSAL AMBIGUITY FILTER: If multiple branches could answer this, ask for clarification
+            if (resolvedQuery.isAmbiguous()) {
+                // SAVE TOPIC: Remember what they asked about (e.g. "cctv")
+                if (resolvedQuery.getTargetSystem() != null) {
+                    chatMemoryService.setPendingTopic(sessionId, resolvedQuery.getTargetSystem());
+                } else {
+                    // Map common intents to readable topics if targetSystem is null
+                    chatMemoryService.setPendingTopic(sessionId, resolvedQuery.getIntent().name());
+                }
+
+                String clarification = "I found multiple branches. Which specific branch would you like to check? \n\n" +
+                        String.join(", ", snapshots.stream()
+                                .map(s -> s.getIdentity().getBranchName())
+                                .toList());
+                
+                chatMemoryService.recordInteraction(sessionId, request.getQuestion(), clarification);
+                return ChatResponse.builder()
+                        .answer(clarification)
+                        .metadata(buildMetadata(resolvedQuery, true))
+                        .tokensUsed(0)
+                        .timestamp(System.currentTimeMillis())
+                        .error(false)
+                        .build();
+            }
+
+            // TOPIC RETENTION: If we have a pending topic and the user just gave us a branch, apply the topic
+            String activeTopic = null;
+            if (resolvedQuery.getTargetBranch() != null && !resolvedQuery.isBranchFromMemory()) {
+                activeTopic = chatMemoryService.getPendingTopic(sessionId);
+                if (activeTopic != null) {
+                    log.info("Applying pending topic '{}' to branch {}", activeTopic, resolvedQuery.getTargetBranch().getIdentity().getBranchName());
+                    chatMemoryService.setPendingTopic(sessionId, null); 
+                }
+            }
+
             BranchSnapshot targetBranch = resolvedQuery.getTargetBranch();
             if (targetBranch != null && targetBranch.getIdentity() != null) {
                 chatMemoryService.setActiveBranch(sessionId, targetBranch.getIdentity().getTechnicalId());
@@ -102,6 +147,8 @@ public class ChatService {
             }
 
             String userMessage = "Structured Branch Context:\n" + contextJson
+                    + (resolvedQuery.isBranchFromMemory() ? "\nNOTE: The user did not specify a branch, so we are continuing with " + targetBranch.getIdentity().getBranchName() + " from memory. You MUST explicitly name this branch in your response." : "")
+                    + (activeTopic != null ? "\nCRITICAL: The user is following up on a previous question about '" + activeTopic + "'. You MUST ONLY report on this specific topic for the branch." : "")
                     + "\n\nUser Question: " + request.getQuestion();
             String answer = openAIClient.chat(SYSTEM_PROMPT, history, userMessage);
             logDecision(resolvedQuery, false, estimatedTokens);

@@ -13,6 +13,8 @@ public class ResolvedQuery {
     BranchSnapshot targetBranch;
     String targetSystem;
     boolean global;
+    boolean ambiguous;
+    boolean branchFromMemory;
     boolean deterministic;
     double confidence;
 }
