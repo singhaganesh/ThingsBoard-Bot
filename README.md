@@ -1,345 +1,266 @@
-# ThingsBoard Bot 🤖
+# 🤖 ThingsBoard AI IoT Assistant (SAI)
 
-> **AI-Powered Chatbot for IoT Device Management**
+<div align="center">
 
-A intelligent chatbot that connects to your ThingsBoard IoT platform and uses OpenAI to answer questions about your devices in plain English. No technical knowledge required!
+[![Build Status](https://img.shields.io/badge/build-stable-green?style=flat-square)](https://github.com)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.0.1--SNAPSHOT-orange?style=flat-square)](https://github.com)
+[![Java](https://img.shields.io/badge/Java-21-red?style=flat-square)](https://oracle.com/java)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.3-brightgreen?style=flat-square)](https://spring.io)
 
----
+![ThingsBoard Bot Banner](https://via.placeholder.com/1200x400?text=Smart+IoT+Monitoring+Assistant)
 
-## 📖 Choose Your Guide
+## **Your IoT Data, Simplified. Ask. Analyze. Act. Done.**
 
-- **👥 [For Non-Technical Users](#-for-non-technical-users)** - Simple explanation of what this does
-- **👨‍💻 [For Developers](#-for-developers)** - Technical setup and architecture details
-
----
-
-# 👥 For Non-Technical Users
-
-## What Is This? 🤔
-
-Imagine you have many IoT devices (sensors, thermostats, cameras, etc.) spread across your facility. Instead of logging into a complicated dashboard, you can simply **ask questions in a chat window**:
-
-- "How many devices are offline right now?"
-- "What's the current temperature in Building A?"
-- "Which sensor has low battery?"
-- "What happened to Device X yesterday?"
-
-The chatbot will read data from all your devices and give you the answer **immediately**.
-
-## The Problem It Solves ✅
-
-| Before | After |
-|--------|-------|
-| Manually log into dashboard to check each device | Ask chatbot one question, get instant answer |
-| Hard to understand complex technical data | Chatbot explains in simple terms |
-| Finding device problems takes time | Chatbot alerts you to issues immediately |
-| Hard to track historical events | Chatbot remembers past events |
-
-## How It Works (Simple Version) 🔄
-
-```
-You type a question in the chat box
-         ↓
-Chatbot reads all device data from ThingsBoard
-         ↓
-AI assistant (OpenAI) understands your question
-         ↓
-AI looks through device data for the answer
-         ↓
-Chatbot explains the answer in simple English
-         ↓
-You get your answer instantly!
-```
-
-## Key Features 🌟
-
-✨ **Easy Chat Interface** - Just type your question, no training needed  
-📊 **Real-Time Data** - Always sees your latest device information  
-🧠 **Intelligent Answers** - Understands context and gives meaningful responses  
-💬 **Conversation History** - Remembers previous questions  
-🔒 **Secure** - Only shows data you have permission to see  
-
-## Setup for Users (Simple) 🚀
-
-Your IT team will set this up for you. Once they do:
-
-1. **Open this URL in your browser:** `http://localhost:8080` (your IT will give you the actual URL)
-2. **Look for the chat box** in the bottom-right corner
-3. **Type your question** and press Enter
-4. **Get your answer!** 💡
-
-That's it! You don't need to know anything about databases, APIs, or code.
+Tired of navigating complex IoT dashboards? **We've built the "Siri" for your ThingsBoard network.**  
+Real-time status reports, automated health checks, and intelligent security analysis — all through a simple chat interface.
 
 ---
 
-# 👨‍💻 For Developers
+### 🚀 Quick Navigation
+- **[👥 I'm Not a Developer — Show me the overview](#part-1---for-everyone-)**
+- **[⚙️ I'm a Developer — Show me the setup](#part-2---for-developers-)**
 
-## 📌 Project Overview
+</div>
 
-A **context-augmented generation (CAG) chatbot** built on Spring Boot that intelligently routes IoT device queries to live ThingsBoard telemetry or historical analysis. The system fetches real-time device data, filters it for token efficiency, and leverages OpenAI to provide context-aware answers.
+---
 
-## 🎯 Purpose & Problem Statement
+# 👥 PART 1 — FOR EVERYONE 🌍
 
-| Aspect | Details |
-|--------|---------|
-| **Purpose** | Provide a natural language interface to IoT device data via ThingsBoard without requiring technical dashboard skills |
-| **Problem Solved** | Eliminates manual dashboard navigation; enables historical context retrieval; reduces token overhead through smart filtering |
-| **Use Case** | Facility managers, operations teams querying device status, anomalies, and trends |
+*No coding knowledge required. Read this section in ~5 minutes.*
 
-## 🛠️ Tech Stack
+## Table of Contents (Part 1)
+1. [What Is This Project?](#what-is-this-project)
+2. [The Problem We Solve](#the-problem-we-solve)
+3. [How It Works](#how-it-works-simple-explanation)
+4. [Key Benefits](#key-benefits)
+5. [Who Is This For?](#who-is-this-for)
+6. [Live Demo & Screenshots](#live-demo--screenshots)
+7. [Frequently Asked Questions](#frequently-asked-questions-non-technical)
 
-| Layer | Technology |
-|-------|-----------|
-| **Backend** | Java 21, Spring Boot 4.0.3, Spring Data JPA, Spring Cache |
-| **Database** | MySQL 8.0+ (conversation history, entities) |
-| **APIs** | ThingsBoard REST API, OpenAI Chat API |
-| **Frontend** | HTML5, Vanilla CSS3, Vanilla JavaScript |
-| **Build** | Maven 3.8+, Java Compiler |
+---
 
-## 🏗️ System Architecture (Brief)
+## What Is This Project?
 
-```
-┌─ Browser ─────────────┐
-│ Chat Widget UI        │
-└──────────┬────────────┘
-           │ HTTP
-┌──────────▼──────────────────────┐
-│ Spring Boot Backend             │
-│ ┌────────────────────────────┐  │
-│ │ ChatService (Orchestrator) │  │
-│ │ 1. Fetch device data       │  │
-│ │ 2. Filter context          │  │
-│ │ 3. Call OpenAI             │  │
-│ │ 4. Return response         │  │
-│ └────────────────────────────┘  │
-└──────────┬──────────┬──────────┬─┘
-           │          │          │
-     ┌─────▼─┐  ┌────▼───┐  ┌──▼──────┐
-     │Things │  │ OpenAI │  │ MySQL   │
-     │Board  │  │ API    │  │ DB      │
-     └───────┘  └────────┘  └─────────┘
-```
+Imagine you manage a bank with 100 branches, each filled with cameras, alarm panels, and battery backups. To check if everything is working, you usually have to log into a complicated dashboard, click through 10 menus, and read rows of technical numbers.
 
-## 📋 Features
+**What if you could just ask your computer: "Are there any inactive branches?"**
 
-- ✅ Context-aware Q&A from live telemetry
-- ✅ Multi-device support with tenant/customer/user scopes
-- ✅ 60-second device data caching
-- ✅ Token counting & context filtering
-- ✅ Multi-turn conversation memory
-- ✅ Real-time vs. historical data routing
-- ✅ Floating chat widget (Acid Industrial theme)
+That's exactly what we built. **SAI (Smart Assistant for IoT)** connects directly to your ThingsBoard platform and lets you talk to your facility data in plain English.
 
-## 📦 Project Structure
+---
+
+## The Problem We Solve
+
+### The Current Situation
+
+**For Security Managers:**
+- ❌ Manually checking 100+ branches every morning is slow.
+- ❌ Identifying "Offline" devices requires technical expertise.
+- ❌ Finding a specific camera fault takes too many clicks.
+- ❌ Historical data is hard to find and compare.
+
+### Our Solution
+
+We created a **Senior Security Analyst AI** that:
+- ✅ Instantly identifies offline branches across your entire network.
+- ✅ Explains complex sensor data (like battery voltage) in simple terms.
+- ✅ Remembers your previous questions to provide detailed follow-ups.
+- ✅ Anchors every answer to a specific branch so there's never confusion.
+
+---
+
+## How It Works (Simple Explanation)
+
+### Step-by-Step: From Question to Answer
 
 ```
-src/main/java/com/seple/ThingsBoard_Bot/
-├── client/              # External API integrations
-│   ├── ThingsBoardClient.java
-│   ├── UserAwareThingsBoardClient.java
-│   └── OpenAIClient.java
-├── config/              # Spring beans & properties
-├── controller/          # REST endpoints
-├── service/             # Business logic
-│   ├── ChatService.java (core orchestrator)
-│   ├── DataService.java
-│   ├── ChatMemoryService.java
-│   └── ChartService.java
-├── util/                # Helpers
-│   ├── ContextFilterUtil.java
-│   └── TokenCounterService.java
-├── model/               # DTOs & Entities
-├── repository/          # JPA repositories
-└── exception/           # Custom exceptions
+1. YOU ASK A QUESTION
+   → "What is the CCTV status of BALLY BAZAR?"
+
+2. BOT FETCHES TRUTH
+   → The bot reads the real-time sensor data from ThingsBoard.
+
+3. BRAIN ANALYZES
+   → The AI looks at the numbers (e.g., "14/16 cameras online").
+
+4. PROFESSIONAL REPORT
+   → SAI formats a clean response: 
+     "Branch BALLY BAZAR: CCTV Camera Status is 14 cameras ONLINE."
+
+5. FOLLOW UP
+   → You ask: "What about the battery?"
+   → SAI remembers you're talking about BALLY BAZAR and gives you the voltage.
 ```
 
-## ⚙️ Prerequisites
+---
 
-- **Java 21+** (OpenJDK or Oracle JDK)
-- **Maven 3.8+**
-- **MySQL 8.0+** (running locally or remote)
-- **ThingsBoard account** (cloud or self-hosted)
-- **OpenAI API key** (paid or trial)
-- **Git** (for cloning)
+## Key Benefits
 
-## 🚀 Setup & Run Locally
+✅ **Save Time:** Get a full branch health report in 3 seconds instead of 10 minutes.  
+✅ **Zero Learning Curve:** If you can send a WhatsApp message, you can use SAI.  
+✅ **Mathematically Accurate:** Uses "Truth-Injection" logic to ensure counts are always correct.  
+✅ **Proactive Analysis:** SAI links different data points (like power loss vs. battery drop) to warn you of risks.  
 
-### Step 1: Clone Repository
+---
+
+## Who Is This For?
+
+### 🏦 **Bank & Facility Managers**
+Monitor security and hardware health across hundreds of remote locations from one window.
+
+### 🛡️ **Security Operations Centers (SOC)**
+Quickly identify which branch needs a physical maintenance visit without digging through logs.
+
+### 👨‍🔧 **Maintenance Teams**
+Ask "What is the HDD status?" before driving to a branch so you know exactly which part to bring.
+
+---
+
+## Live Demo & Screenshots
+
+### 📸 Screenshots
+
+**Screenshot 1: The Global Overview**
+![Home Screen Placeholder](https://via.placeholder.com/300x600?text=Total+Online/Offline)  
+*See your entire bank network status in one sentence.*
+
+**Screenshot 2: Precision Reporting**
+![Report Screen Placeholder](https://via.placeholder.com/300x600?text=Branch+Metrics)  
+*Self-descriptive answers anchored to specific branch names.*
+
+---
+
+## Frequently Asked Questions (Non-Technical)
+
+### 🔒 **Q: Is my data safe?**
+**A:** Yes. SAI acts as a "Read-Only" analyst. It cannot change your device settings, and it only sees the data your account has permission to view.
+
+### 📱 **Q: Does it work on my phone?**
+**A:** Yes! The chat widget works in any modern web browser on desktop, tablet, or smartphone.
+
+---
+
+# ⚙️ PART 2 — FOR DEVELOPERS 👨‍💻
+
+*Complete technical documentation, setup guides, and architecture details.*
+
+## Table of Contents (Part 2)
+1. [Technical Overview](#technical-overview)
+2. [Tech Stack](#tech-stack)
+3. [System Architecture](#system-architecture)
+4. [Getting Started](#getting-started)
+5. [Folder & File Structure](#folder--file-structure)
+6. [Testing & Validation](#testing)
+
+---
+
+## Technical Overview
+
+### Architecture Pattern: **Truth-Injection Model (CAG)**
+
+SAI is built as a **Context-Augmented Generation (CAG)** system. Unlike standard chatbots that "guess," SAI uses a deterministic backend to pre-calculate "Truth" before the AI ever sees it.
+
+✅ **Ambiguity Filter:** Detects queries missing a target branch and requests clarification.  
+✅ **Topic Retention:** Stores "Pending Intent" in session memory to handle context-heavy follow-ups.  
+✅ **Deep Mapping:** Recursively parses nested JSON telemetry (CCTV channels, HDD slots) into AI-ready structures.  
+
+---
+
+## Tech Stack
+
+| Category | Technology | Version | Purpose |
+|----------|-----------|---------|---------|
+| **Backend** | Java | 21 | Core Language |
+| **Framework** | Spring Boot | 4.0.3 | Application Framework |
+| **Build Tool** | Maven | 3.8+ | Dependency Management |
+| **IoT Platform** | ThingsBoard | Cloud/PE | Source of Truth (REST API) |
+| **LLM Engine** | OpenAI | GPT-4o | Natural Language Processing |
+| **Memory** | ConcurrentLinkedDeque | In-Memory | Stateless Session History |
+
+---
+
+## System Architecture
+
+```mermaid
+graph TD
+    User((User)) -->|Question| Controller[ChatController]
+    Controller -->|Resolve Intent| Intent[QueryIntentResolver]
+    Intent -->|Match Branch| Index[BranchAliasIndex]
+    Intent -->|Fetch Data| TB[ThingsBoard API]
+    TB -->|Raw JSON| Filter[ContextFilterUtil]
+    Filter -->|Truth Note| Service[ChatService]
+    Service -->|CAG Prompt| OpenAI[OpenAI API]
+    OpenAI -->|Formatted Answer| User
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+*   **Java 21** installed and configured in `PATH`.
+*   **OpenAI API Key** with GPT-4 access.
+*   **ThingsBoard Credentials** (Tenant or Customer level).
+
+### 1. Installation
 ```bash
-git clone https://github.com/your-org/ThingsBoard-Bot.git
+git clone https://github.com/singhaganesh/ThingsBoard-Bot.git
 cd ThingsBoard-Bot
 ```
 
-### Step 2: Create MySQL Database
-```bash
-mysql -u root -p
-```
-```sql
-CREATE DATABASE thingsboard_bot_db CHARACTER SET utf8mb4;
-CREATE USER 'tb_bot'@'localhost' IDENTIFIED BY 'secure_password';
-GRANT ALL PRIVILEGES ON thingsboard_bot_db.* TO 'tb_bot'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-### Step 3: Configure Application
+### 2. Configuration
 Edit `src/main/resources/application.properties`:
-
 ```properties
-# Spring
-spring.application.name=ThingsBoard-Bot
-server.port=8080
-
-# Database
-spring.datasource.url=jdbc:mysql://localhost:3306/thingsboard_bot_db
-spring.datasource.username=tb_bot
-spring.datasource.password=secure_password
-spring.jpa.hibernate.ddl-auto=update
-
 # ThingsBoard
-iotchatbot.thingsboard.url=https://your-thingsboard-url.com
-iotchatbot.thingsboard.username=admin@thingsboard.io
-iotchatbot.thingsboard.password=your_tb_password
+iotchatbot.thingsboard.url=https://thingsboard.cloud
+iotchatbot.thingsboard.username=your_email
+iotchatbot.thingsboard.password=your_password
 
 # OpenAI
-iotchatbot.openai.api-key=sk-your-api-key-here
-iotchatbot.openai.model=gpt-4
+iotchatbot.openai.api-key=sk-your-key
+iotchatbot.openai.model=gpt-4o
 ```
 
-### Step 4: Build & Run
+### 3. Run the Bot
 ```bash
-# Clean build
-mvn clean install
-
-# Run with Maven
-mvn spring-boot:run
-
-# OR package & run JAR
-mvn clean package
+./mvnw clean package -DskipTests
 java -jar target/ThingsBoard-Bot-0.0.1-SNAPSHOT.jar
-```
-
-### Step 5: Access Application
-- **Open browser:** `http://localhost:8080`
-- **Chat widget:** Bottom-right corner
-
-## 📡 API Documentation
-
-### Chat Endpoint
-```http
-POST /api/v1/chat/ask
-Content-Type: application/json
-
-{
-  "question": "How many devices are offline?",
-  "userId": "user123"
-}
-```
-
-**Response:**
-```json
-{
-  "response": "2 out of 10 devices are currently offline...",
-  "metadata": {
-    "tokensUsed": 342,
-    "executionTime": 1250
-  }
-}
-```
-
-### Data Endpoints
-```http
-GET /api/v1/data/all-devices
-GET /api/v1/data/full
-Header: X-TB-Token: your_customer_token (optional)
-```
-
-## 👥 User Flows
-
-### Flow 1: Basic Q&A
-```
-User → Question in chat → ChatService fetches live data → 
-OpenAI generates response → User sees answer
-```
-
-### Flow 2: Multi-Turn Conversation
-```
-Q1: "What's device X status?"
-→ [System stores in ChatMemoryService]
-Q2: "Show me its history"
-→ [System includes previous context]
-A2: "Yesterday it was..."
-```
-
-### Flow 3: User-Scoped Access
-```
-Customer provides X-TB-Token → 
-UserAwareThingsBoardClient filters data to customer scope →
-Only authorized device data shown
-```
-
-## ✅ Testing
-
-### Unit Test Locations
-```
-src/test/java/com/seple/ThingsBoard_Bot/
-├── service/ChatServiceTest.java
-├── util/TokenCounterServiceTest.java
-├── util/ContextFilterUtilTest.java
-└── client/OpenAIClientTest.java
-```
-
-### Run Tests
-```bash
-# All tests
-mvn test
-
-# Specific test class
-mvn test -Dtest=ChatServiceTest
-
-# With coverage
-mvn test jacoco:report
-```
-
-### Manual Testing (cURL)
-```bash
-# Test chat endpoint
-curl -X POST http://localhost:8080/api/v1/chat/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "List all devices", "userId": "test"}'
-
-# Test data endpoint
-curl http://localhost:8080/api/v1/data/all-devices
-
-# With authentication
-curl -H "X-TB-Token: your_token" http://localhost:8080/api/v1/data/full
-```
-
-## 🔧 Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| **Build fails** | `mvn clean install -U` (update dependencies) |
-| **ThingsBoard connection error** | Verify credentials, check URL accessibility |
-| **OpenAI API error** | Check API key validity, confirm billing, verify model name |
-| **Database connection refused** | Ensure MySQL running, verify credentials in properties |
-| **Chat widget not showing** | Clear browser cache, check `index.html` in `src/main/resources/static` |
-
-## 📝 Environment Variables (Alternative to properties)
-```bash
-export TB_URL="https://your-thingsboard-url.com"
-export TB_USER="admin@thingsboard.io"
-export TB_PASS="password"
-export OPENAI_KEY="sk-..."
-export DB_URL="jdbc:mysql://localhost:3306/thingsboard_bot_db"
-export DB_USER="tb_bot"
-export DB_PASS="secure_password"
 ```
 
 ---
 
-## 📞 Support
+## Folder & File Structure
 
-For issues, check troubleshooting section or create an issue in the repository.
+```
+ThingsBoard-Bot/
+├── src/main/java/com/seple/ThingsBoard_Bot/
+│   ├── client/              # OpenAI & ThingsBoard API Wrappers
+│   ├── config/              # Security, Cache, and OpenAI Configs
+│   ├── model/domain/        # Structured IoT Domain Objects (Branch, Power, CCTV)
+│   ├── service/             # CORE LOGIC
+│   │   ├── ChatService.java # Orchestrator (Truth-Injection Logic)
+│   │   ├── normalization/   # Key mapping and Data Cleanup
+│   │   └── query/           # Intent Resolution & Deterministic Answers
+│   └── util/                # Token Counting & Context Filtering
+└── src/main/resources/static/ # Floating Chat UI
+```
 
-**Last Updated:** 2026-03-11  
-**Version:** 0.0.1-SNAPSHOT
+---
+
+## Testing & Validation
+
+SAI uses a **Golden Question** testing strategy to ensure 100% accuracy.
+
+```bash
+# Run all unit and integration tests
+./mvnw test
+```
+
+**Key Test Areas:**
+*   `QueryIntentResolverTest`: Validates that user questions map to correct metrics.
+*   `DeterministicAnswerServiceTest`: Ensures "Truth-Injection" calculates correct counts.
+*   `BranchSnapshotMapperTest`: Verifies that technical ThingsBoard data is correctly unwrapped.
+
+---
+*Developed by Ganesh Singha — Senior IoT Developer.*
