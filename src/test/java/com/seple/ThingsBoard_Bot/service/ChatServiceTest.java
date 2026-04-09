@@ -22,7 +22,9 @@ import com.seple.ThingsBoard_Bot.model.domain.PowerStatus;
 import com.seple.ThingsBoard_Bot.model.dto.ChatMessage;
 import com.seple.ThingsBoard_Bot.model.dto.ChatRequest;
 import com.seple.ThingsBoard_Bot.model.dto.ChatResponse;
+import com.seple.ThingsBoard_Bot.model.dto.GlobalOverviewCounters;
 import com.seple.ThingsBoard_Bot.service.query.DeterministicAnswerService;
+import com.seple.ThingsBoard_Bot.service.index.GlobalAggregatorService;
 import com.seple.ThingsBoard_Bot.service.query.QueryIntent;
 import com.seple.ThingsBoard_Bot.service.query.QueryIntentResolver;
 import com.seple.ThingsBoard_Bot.service.query.ResolvedQuery;
@@ -38,6 +40,7 @@ class ChatServiceTest {
     private final QueryIntentResolver queryIntentResolver = mock(QueryIntentResolver.class);
     private final DeterministicAnswerService deterministicAnswerService = mock(DeterministicAnswerService.class);
     private final StructuredContextBuilder structuredContextBuilder = mock(StructuredContextBuilder.class);
+    private final GlobalAggregatorService globalAggregatorService = mock(GlobalAggregatorService.class);
 
     private final ChatService service = new ChatService(
             userDataService,
@@ -47,7 +50,8 @@ class ChatServiceTest {
             chatbotConfig,
             queryIntentResolver,
             deterministicAnswerService,
-            structuredContextBuilder);
+            structuredContextBuilder,
+            globalAggregatorService);
 
     @Test
     void shouldApplyPendingTopicForBranchOnlyFollowUpAndUseDeterministicAnswer() {
@@ -92,6 +96,42 @@ class ChatServiceTest {
         assertFalse(response.isError());
         assertEquals("For Branch CHANDANNAGAR, Battery Voltage Reading is 0.0V DC.", response.getAnswer());
         verify(chatMemoryService).setPendingTopic(token, null);
+        verify(openAIClient, never()).chat(any(), any(), any());
+    }
+
+    @Test
+    void shouldUseAggregatorForGlobalOverviewWhenEnabled() {
+        String token = "jwt-token";
+        String question = "is there any inactive branches among all my branches";
+        List<BranchSnapshot> snapshots = List.of();
+
+        ResolvedQuery global = ResolvedQuery.builder()
+                .intent(QueryIntent.GLOBAL_OVERVIEW)
+                .originalQuestion(question)
+                .global(true)
+                .ambiguous(false)
+                .deterministic(true)
+                .confidence(0.95)
+                .build();
+
+        when(chatMemoryService.getHistory(token)).thenReturn(List.of());
+        when(chatMemoryService.getActiveBranch(token)).thenReturn(null);
+        when(userDataService.isTwoStepFetchEnabled()).thenReturn(true);
+        when(userDataService.getUserBranchIndexSnapshots(token)).thenReturn(snapshots);
+        when(queryIntentResolver.resolve(eq(question), eq(snapshots), eq(null))).thenReturn(global);
+        when(globalAggregatorService.isEnabled()).thenReturn(true);
+        when(globalAggregatorService.fetchGlobalOverview(token)).thenReturn(GlobalOverviewCounters.builder()
+                .onlineBranches(12)
+                .offlineBranches(0)
+                .sourceDeviceId("agg-1")
+                .build());
+        when(deterministicAnswerService.answerGlobalOverview(any(GlobalOverviewCounters.class)))
+                .thenReturn("**Total: 12 Online | 0 Offline**\nFor your question about all branches, here is the current branch-level status.");
+
+        ChatResponse response = service.answerQuestion(new ChatRequest(question, null, null), token);
+
+        assertFalse(response.isError());
+        assertEquals("GLOBAL_OVERVIEW", response.getMetadata().getIntent());
         verify(openAIClient, never()).chat(any(), any(), any());
     }
 }

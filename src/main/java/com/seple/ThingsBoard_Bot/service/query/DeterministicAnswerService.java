@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seple.ThingsBoard_Bot.model.domain.BranchSnapshot;
 import com.seple.ThingsBoard_Bot.model.domain.NormalizedState;
 import com.seple.ThingsBoard_Bot.model.domain.SubsystemStatus;
+import com.seple.ThingsBoard_Bot.model.dto.GlobalOverviewCounters;
 
 @Service
 public class DeterministicAnswerService {
@@ -120,6 +121,15 @@ public class DeterministicAnswerService {
             }
         }
         return answerTemplateService.renderGlobalOverview(online, offline);
+    }
+
+    public String answerGlobalOverview(GlobalOverviewCounters counters) {
+        if (counters == null) {
+            return null;
+        }
+        int online = counters.getOnlineBranches() != null ? counters.getOnlineBranches() : 0;
+        int offline = counters.getOfflineBranches() != null ? counters.getOfflineBranches() : 0;
+        return answerTemplateService.renderGlobalOverviewFromCounters(online, offline);
     }
 
     private String answerSubsystemStatus(BranchSnapshot branch, String targetSystem) {

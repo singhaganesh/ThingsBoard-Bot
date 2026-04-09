@@ -14,8 +14,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
+import com.seple.ThingsBoard_Bot.config.ThingsBoardConfig;
 import com.seple.ThingsBoard_Bot.model.domain.BranchSnapshot;
+import com.seple.ThingsBoard_Bot.model.dto.DeviceIndexEntry;
+import com.seple.ThingsBoard_Bot.service.index.BranchIndexService;
 import com.seple.ThingsBoard_Bot.service.normalization.BranchSnapshotMapper;
+import com.seple.ThingsBoard_Bot.service.query.IntentKeyProfileRegistry;
+import com.seple.ThingsBoard_Bot.service.query.QueryIntent;
 
 /**
  * Per-user data caching service with 5-MINUTE TTL + background refresh.
@@ -31,6 +36,9 @@ public class UserDataService {
     private static final Logger log = LoggerFactory.getLogger(UserDataService.class);
     private final UserAwareThingsBoardClient userTbClient;
     private final BranchSnapshotMapper branchSnapshotMapper;
+    private final BranchIndexService branchIndexService;
+    private final IntentKeyProfileRegistry intentKeyProfileRegistry;
+    private final ThingsBoardConfig thingsBoardConfig;
 
     // Per-user cache: key = userToken hash, value = cached data + timestamp
     private final ConcurrentHashMap<String, CachedUserData> userCacheMap = new ConcurrentHashMap<>();
@@ -40,9 +48,14 @@ public class UserDataService {
     // Refresh threshold (refresh when 80% of TTL elapsed)
     private static final long REFRESH_THRESHOLD_MS = CACHE_TTL_MS * 80 / 100;
 
-    public UserDataService(UserAwareThingsBoardClient userTbClient, BranchSnapshotMapper branchSnapshotMapper) {
+    public UserDataService(UserAwareThingsBoardClient userTbClient, BranchSnapshotMapper branchSnapshotMapper,
+            BranchIndexService branchIndexService, IntentKeyProfileRegistry intentKeyProfileRegistry,
+            ThingsBoardConfig thingsBoardConfig) {
         this.userTbClient = userTbClient;
         this.branchSnapshotMapper = branchSnapshotMapper;
+        this.branchIndexService = branchIndexService;
+        this.intentKeyProfileRegistry = intentKeyProfileRegistry;
+        this.thingsBoardConfig = thingsBoardConfig;
     }
 
     // ==================== Cache Entry ====================
@@ -219,6 +232,62 @@ public class UserDataService {
         return snapshots;
     }
 
+    public List<BranchSnapshot> getUserBranchIndexSnapshots(String userToken) {
+        List<BranchSnapshot> snapshots = new ArrayList<>();
+        for (DeviceIndexEntry entry : branchIndexService.getIndex(userToken)) {
+            Map<String, Object> minimal = new HashMap<>();
+            minimal.put("device_id", entry.getDeviceId());
+            minimal.put("device_name", entry.getBranchName());
+            minimal.put("deviceName", entry.getBranchName());
+            minimal.put("formattedBranchName", entry.getBranchName());
+            minimal.put("branchName", entry.getBranchName());
+            minimal.put("device_type", entry.getDeviceType());
+            snapshots.add(branchSnapshotMapper.map(minimal));
+        }
+        return snapshots;
+    }
+
+    public BranchSnapshot getBranchSnapshotForIntent(String userToken, String branchTechnicalId, QueryIntent intent) {
+        if (branchTechnicalId == null || branchTechnicalId.isBlank()) {
+            return null;
+        }
+
+        List<DeviceIndexEntry> index = branchIndexService.getIndex(userToken);
+        String wanted = normalizeKey(branchTechnicalId);
+        DeviceIndexEntry matched = null;
+        for (DeviceIndexEntry entry : index) {
+            if (normalizeKey(entry.getBranchName()).equals(wanted)
+                    || (entry.getAliases() != null && entry.getAliases().stream().map(this::normalizeKey).anyMatch(wanted::equals))) {
+                matched = entry;
+                break;
+            }
+        }
+        if (matched == null) {
+            return null;
+        }
+
+        List<String> keys = intentKeyProfileRegistry.keysFor(intent);
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("device_id", matched.getDeviceId());
+        raw.put("device_name", matched.getBranchName());
+        raw.put("deviceName", matched.getBranchName());
+        raw.put("formattedBranchName", matched.getBranchName());
+        raw.put("branchName", matched.getBranchName());
+        raw.put("device_type", matched.getDeviceType());
+
+        // In phase-2 we keep attributes broad and scope telemetry to intent keys.
+        raw.putAll(userTbClient.getAttributes(userToken, "CLIENT_SCOPE", matched.getDeviceId()));
+        raw.putAll(userTbClient.getAttributes(userToken, "SERVER_SCOPE", matched.getDeviceId()));
+        raw.putAll(userTbClient.getAttributes(userToken, "SHARED_SCOPE", matched.getDeviceId()));
+        raw.putAll(userTbClient.getTelemetry(userToken, matched.getDeviceId(), keys));
+
+        return branchSnapshotMapper.map(raw);
+    }
+
+    public boolean isTwoStepFetchEnabled() {
+        return thingsBoardConfig.isTwoStepFetchEnabled();
+    }
+
     /**
      * Invalidate cache for a specific user.
      */
@@ -235,6 +304,19 @@ public class UserDataService {
      */
     private String getCacheKey(String userToken) {
         return String.valueOf(userToken.hashCode());
+    }
+
+    private String normalizeKey(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.toUpperCase()
+                .replace("BOI-", "")
+                .replace("BRANCH ", "")
+                .replace('-', ' ')
+                .replace('_', ' ')
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     /**
