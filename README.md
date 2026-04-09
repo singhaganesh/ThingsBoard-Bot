@@ -1,4 +1,4 @@
-﻿# 🤖 ThingsBoard AI IoT Assistant (SAI)
+﻿# 🤖 ThingsBoard AI IoT Assistant 
 
 <div align="center">
 
