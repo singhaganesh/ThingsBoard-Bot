@@ -1,4 +1,4 @@
-# 🔌 EV Charging Management Syste
+# 🔌 EV Charging Management System
 
 <div align="center">
 
