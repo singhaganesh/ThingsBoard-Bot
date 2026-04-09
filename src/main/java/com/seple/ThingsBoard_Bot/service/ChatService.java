@@ -8,11 +8,13 @@ import com.seple.ThingsBoard_Bot.client.OpenAIClient;
 import com.seple.ThingsBoard_Bot.config.ChatbotConfig;
 import com.seple.ThingsBoard_Bot.exception.ContextOverflowException;
 import com.seple.ThingsBoard_Bot.model.domain.BranchSnapshot;
+import com.seple.ThingsBoard_Bot.model.dto.GlobalOverviewCounters;
 import com.seple.ThingsBoard_Bot.model.dto.AnswerMetadata;
 import com.seple.ThingsBoard_Bot.model.dto.ChatMessage;
 import com.seple.ThingsBoard_Bot.model.dto.ChatRequest;
 import com.seple.ThingsBoard_Bot.model.dto.ChatResponse;
 import com.seple.ThingsBoard_Bot.service.query.DeterministicAnswerService;
+import com.seple.ThingsBoard_Bot.service.index.GlobalAggregatorService;
 import com.seple.ThingsBoard_Bot.service.query.QueryIntent;
 import com.seple.ThingsBoard_Bot.service.query.QueryIntentResolver;
 import com.seple.ThingsBoard_Bot.service.query.ResolvedQuery;
@@ -54,12 +56,14 @@ public class ChatService {
     private final QueryIntentResolver queryIntentResolver;
     private final DeterministicAnswerService deterministicAnswerService;
     private final StructuredContextBuilder structuredContextBuilder;
+    private final GlobalAggregatorService globalAggregatorService;
 
     public ChatService(UserDataService userDataService, OpenAIClient openAIClient,
             ChartService chartService, ChatMemoryService chatMemoryService,
             ChatbotConfig chatbotConfig,
             QueryIntentResolver queryIntentResolver, DeterministicAnswerService deterministicAnswerService,
-            StructuredContextBuilder structuredContextBuilder) {
+            StructuredContextBuilder structuredContextBuilder,
+            GlobalAggregatorService globalAggregatorService) {
         this.userDataService = userDataService;
         this.openAIClient = openAIClient;
         this.chatMemoryService = chatMemoryService;
@@ -67,6 +71,7 @@ public class ChatService {
         this.queryIntentResolver = queryIntentResolver;
         this.deterministicAnswerService = deterministicAnswerService;
         this.structuredContextBuilder = structuredContextBuilder;
+        this.globalAggregatorService = globalAggregatorService;
     }
 
     public ChatResponse answerQuestion(ChatRequest request, String userToken) {
@@ -81,9 +86,28 @@ public class ChatService {
                         .build();
             }
 
-            List<BranchSnapshot> snapshots = userDataService.getUserBranchSnapshots(userToken);
+            boolean twoStepEnabled = userDataService.isTwoStepFetchEnabled();
+            List<BranchSnapshot> snapshots = twoStepEnabled
+                    ? userDataService.getUserBranchIndexSnapshots(userToken)
+                    : userDataService.getUserBranchSnapshots(userToken);
             ResolvedQuery resolvedQuery = queryIntentResolver.resolve(request.getQuestion(), snapshots,
                     chatMemoryService.getActiveBranch(sessionId));
+
+            if (resolvedQuery.isGlobal() && globalAggregatorService.isEnabled()) {
+                GlobalOverviewCounters counters = globalAggregatorService.fetchGlobalOverview(userToken);
+                String globalAnswer = deterministicAnswerService.answerGlobalOverview(counters);
+                if (globalAnswer != null) {
+                    logDecision(resolvedQuery, true, 0);
+                    chatMemoryService.recordInteraction(sessionId, request.getQuestion(), globalAnswer);
+                    return ChatResponse.builder()
+                            .answer(globalAnswer)
+                            .metadata(buildMetadata(resolvedQuery, true))
+                            .tokensUsed(0)
+                            .timestamp(System.currentTimeMillis())
+                            .error(false)
+                            .build();
+                }
+            }
 
             // UNIVERSAL AMBIGUITY FILTER: If multiple branches could answer this, ask for clarification
             if (resolvedQuery.isAmbiguous()) {
@@ -119,6 +143,21 @@ public class ChatService {
                     resolvedQuery = applyPendingTopic(resolvedQuery, activeTopic);
                     chatMemoryService.setPendingTopic(sessionId, null);
                 }
+            }
+
+            // Phase-2 two-step retrieval:
+            // resolve branch against lightweight index first, then lazy-load that single branch by intent.
+            if (twoStepEnabled && resolvedQuery.getTargetBranch() != null && !resolvedQuery.isGlobal()
+                    && resolvedQuery.getTargetBranch().getIdentity() != null) {
+                String branchKey = resolvedQuery.getTargetBranch().getIdentity().getTechnicalId();
+                BranchSnapshot hydrated = userDataService.getBranchSnapshotForIntent(userToken, branchKey, resolvedQuery.getIntent());
+                if (hydrated != null) {
+                    resolvedQuery = resolvedQuery.toBuilder().targetBranch(hydrated).build();
+                    snapshots = List.of(hydrated);
+                }
+            } else if (twoStepEnabled && resolvedQuery.isGlobal()) {
+                // Global deterministic overview still needs a branch list with states for now.
+                snapshots = userDataService.getUserBranchSnapshots(userToken);
             }
 
             BranchSnapshot targetBranch = resolvedQuery.getTargetBranch();

@@ -1,9 +1,9 @@
 package com.seple.ThingsBoard_Bot.client;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.ArrayList;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
@@ -12,6 +12,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -33,7 +34,7 @@ public class ThingsBoardClient {
     private long tokenExpiryTime;
 
     public ThingsBoardClient(ThingsBoardConfig config,
-                             @Qualifier("thingsBoardRestTemplate") RestTemplate restTemplate) {
+            @Qualifier("thingsBoardRestTemplate") RestTemplate restTemplate) {
         this.config = config;
         this.restTemplate = restTemplate;
         this.objectMapper = new ObjectMapper();
@@ -59,17 +60,16 @@ public class ThingsBoardClient {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode responseJson = objectMapper.readTree(response.getBody());
                 this.jwtToken = responseJson.get("token").asText();
-                // Token typically valid for ~15 min; refresh at 10 min
                 this.tokenExpiryTime = System.currentTimeMillis() + (10 * 60 * 1000);
-                log.info("✅ Authenticated with ThingsBoard successfully!");
+                log.info("Authenticated with ThingsBoard successfully");
             } else {
-                log.error("❌ ThingsBoard authentication failed: {}", response.getStatusCode());
+                log.error("ThingsBoard authentication failed: {}", response.getStatusCode());
             }
         } catch (RestClientException e) {
-            log.error("❌ Failed to connect to ThingsBoard: {}", e.getMessage());
+            log.error("Failed to connect to ThingsBoard: {}", e.getMessage());
             throw new RuntimeException("ThingsBoard authentication failed", e);
         } catch (Exception e) {
-            log.error("❌ Error parsing authentication response: {}", e.getMessage());
+            log.error("Error parsing authentication response: {}", e.getMessage());
             throw new RuntimeException("ThingsBoard authentication parse error", e);
         }
     }
@@ -89,13 +89,36 @@ public class ThingsBoardClient {
     // ==================== Devices List ====================
 
     public List<Map<String, String>> getAllDevices() {
-        String url = config.getUrl() + "/api/tenant/devices?pageSize=1000&page=0";
-        log.debug("Fetching all tenant devices from: {}", url);
+        int pageSize = config.getDevicePageSize() > 0 ? config.getDevicePageSize() : 100;
+        return getAllDevicesPaged(pageSize);
+    }
+
+    public List<Map<String, String>> getAllDevicesPaged(int pageSize) {
+        List<Map<String, String>> devices = new ArrayList<>();
+        int page = 0;
+        boolean hasNext = true;
+
+        while (hasNext) {
+            Map<String, Object> pageResult = fetchDevicesPage(page, pageSize);
+            @SuppressWarnings("unchecked")
+            List<Map<String, String>> rows = (List<Map<String, String>>) pageResult.getOrDefault("data", List.of());
+            devices.addAll(rows);
+            hasNext = Boolean.TRUE.equals(pageResult.get("hasNext"));
+            page++;
+        }
+
+        log.info("Fetched {} devices from tenant (paged)", devices.size());
+        return devices;
+    }
+
+    public Map<String, Object> fetchDevicesPage(int page, int pageSize) {
+        String url = config.getUrl() + "/api/tenant/devices?pageSize=" + pageSize + "&page=" + page;
+        Map<String, Object> result = new HashMap<>();
         List<Map<String, String>> devices = new ArrayList<>();
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
@@ -104,7 +127,8 @@ public class ThingsBoardClient {
                     for (JsonNode deviceNode : dataArray) {
                         Map<String, String> deviceMap = new HashMap<>();
                         if (deviceNode.has("id")) {
-                            deviceMap.put("id", deviceNode.get("id").get("id").asText());
+                            JsonNode idNode = deviceNode.get("id");
+                            deviceMap.put("id", idNode.has("id") ? idNode.get("id").asText() : idNode.asText());
                         }
                         if (deviceNode.has("name")) {
                             deviceMap.put("name", deviceNode.get("name").asText());
@@ -115,13 +139,34 @@ public class ThingsBoardClient {
                         devices.add(deviceMap);
                     }
                 }
-                log.info("✅ Fetched {} devices from tenant", devices.size());
+                result.put("hasNext", json.path("hasNext").asBoolean(false));
+            } else {
+                result.put("hasNext", false);
             }
         } catch (Exception e) {
-            log.error("❌ Error fetching all devices: {}", e.getMessage());
+            log.error("Error fetching all devices page {}: {}", page, e.getMessage());
+            result.put("hasNext", false);
         }
 
-        return devices;
+        result.put("data", devices);
+        result.put("page", page);
+        return result;
+    }
+
+    public JsonNode queryEntityData(JsonNode payload) {
+        String url = config.getUrl() + "/api/queries/entityData";
+
+        try {
+            HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(payload), getAuthHeaders());
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.POST, entity, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return objectMapper.readTree(response.getBody());
+            }
+        } catch (Exception e) {
+            log.error("Entity query failed: {}", e.getMessage());
+        }
+
+        return objectMapper.createObjectNode();
     }
 
     // ==================== Telemetry ====================
@@ -142,7 +187,7 @@ public class ThingsBoardClient {
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
@@ -156,14 +201,13 @@ public class ThingsBoardClient {
                         }
                     }
                 });
-                log.info("✅ Fetched {} valid telemetry data points", result.size());
+                log.info("Fetched {} valid telemetry data points", result.size());
             }
         } catch (RestClientException e) {
-            log.error("❌ Failed to fetch telemetry: {}", e.getMessage());
-            // Retry once with fresh token
+            log.error("Failed to fetch telemetry: {}", e.getMessage());
             retryWithFreshToken(() -> fetchTelemetryInto(deviceId, result));
         } catch (Exception e) {
-            log.error("❌ Error parsing telemetry: {}", e.getMessage());
+            log.error("Error parsing telemetry: {}", e.getMessage());
         }
 
         return result;
@@ -177,7 +221,7 @@ public class ThingsBoardClient {
                     + "/values/timeseries";
 
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
@@ -193,7 +237,7 @@ public class ThingsBoardClient {
                 });
             }
         } catch (Exception ex) {
-            log.error("❌ Retry also failed for telemetry: {}", ex.getMessage());
+            log.error("Retry also failed for telemetry: {}", ex.getMessage());
         }
     }
 
@@ -214,7 +258,7 @@ public class ThingsBoardClient {
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode jsonArray = objectMapper.readTree(response.getBody());
@@ -226,12 +270,12 @@ public class ThingsBoardClient {
                         flattenAndPut(result, key, value, "Attribute - " + scope);
                     }
                 }
-                log.info("✅ Fetched {} valid {} attributes", result.size(), scope);
+                log.info("Fetched {} valid {} attributes", result.size(), scope);
             }
         } catch (RestClientException e) {
-            log.error("❌ Failed to fetch {} attributes: {}", scope, e.getMessage());
+            log.error("Failed to fetch {} attributes: {}", scope, e.getMessage());
         } catch (Exception e) {
-            log.error("❌ Error parsing {} attributes: {}", scope, e.getMessage());
+            log.error("Error parsing {} attributes: {}", scope, e.getMessage());
         }
 
         return result;
@@ -242,28 +286,30 @@ public class ThingsBoardClient {
      * If value is not JSON, it is put as-is.
      */
     private void flattenAndPut(Map<String, Object> result, String key, String value, String prefix) {
-        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) return;
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) {
+            return;
+        }
 
         try {
-            // Check if it's a JSON object or array
             if ((value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"))) {
                 JsonNode node = objectMapper.readTree(value);
                 if (node.isObject()) {
                     node.fields().forEachRemaining(entry -> {
                         String subKey = key + "_" + entry.getKey();
-                        String subValue = entry.getValue().isTextual() ? entry.getValue().asText() : entry.getValue().toString();
+                        String subValue = entry.getValue().isTextual() ? entry.getValue().asText()
+                                : entry.getValue().toString();
                         result.put(subKey, subValue);
-                        log.info(" [{}] {} = {}", prefix, subKey, subValue);
+                        log.info("[{}] {} = {}", prefix, subKey, subValue);
                     });
                     return;
                 }
             }
-        } catch (Exception e) {
-            // Not JSON or parse error, fall back to normal put
+        } catch (Exception ignored) {
+            // fall back to normal put
         }
 
         result.put(key, value);
-        log.info("📡 [{}] {} = {}", prefix, key, value);
+        log.info("[{}] {} = {}", prefix, key, value);
     }
 
     // ==================== History (for Charts) ====================
@@ -282,7 +328,7 @@ public class ThingsBoardClient {
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getAuthHeaders());
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
@@ -296,11 +342,11 @@ public class ThingsBoardClient {
                     }
                     result.put(entry.getKey(), points);
                 });
-                log.debug("✅ Fetched {} history points for '{}'",
+                log.debug("Fetched {} history points for '{}'",
                         result.values().stream().mapToInt(List::size).sum(), key);
             }
         } catch (Exception e) {
-            log.error("❌ Error fetching history for '{}': {}", key, e.getMessage());
+            log.error("Error fetching history for '{}': {}", key, e.getMessage());
         }
 
         return result;
@@ -315,7 +361,50 @@ public class ThingsBoardClient {
             authenticate();
             action.run();
         } catch (Exception e) {
-            log.error("❌ Retry with fresh token failed: {}", e.getMessage());
+            log.error("Retry with fresh token failed: {}", e.getMessage());
         }
+    }
+
+    private <T> ResponseEntity<T> exchangeWithRetry(String url, HttpMethod method, HttpEntity<?> entity,
+            Class<T> responseType) {
+        int attempts = Math.max(1, config.getRetryAttempts());
+        long backoffMs = Math.max(0L, config.getRetryBackoffMs());
+        RestClientException lastException = null;
+
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                return restTemplate.exchange(url, method, entity, responseType);
+            } catch (HttpStatusCodeException e) {
+                lastException = e;
+                int code = e.getStatusCode().value();
+                boolean retryable = e.getStatusCode().is5xxServerError() || code == 429 || code == 401;
+                if (code == 401 && attempt < attempts) {
+                    this.jwtToken = null;
+                    authenticate();
+                }
+                if (!retryable || attempt == attempts) {
+                    throw e;
+                }
+            } catch (RestClientException e) {
+                lastException = e;
+                if (attempt == attempts) {
+                    throw e;
+                }
+            }
+
+            if (backoffMs > 0) {
+                try {
+                    Thread.sleep(backoffMs * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+
+        if (lastException != null) {
+            throw lastException;
+        }
+        throw new IllegalStateException("exchangeWithRetry failed without exception");
     }
 }

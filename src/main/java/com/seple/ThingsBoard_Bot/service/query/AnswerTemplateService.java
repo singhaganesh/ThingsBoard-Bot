@@ -33,6 +33,11 @@ public class AnswerTemplateService {
         return builder.toString();
     }
 
+    public String renderGlobalOverviewFromCounters(int onlineCount, int offlineCount) {
+        return "**Total: " + onlineCount + " Online | " + offlineCount + " Offline**"
+                + "\nFor your question about all branches, here is the current branch-level status.";
+    }
+
     public String renderGatewayStatus(BranchSnapshot branch, String stateText) {
         return "**For Branch " + branchName(branch) + ", the Gateway status is currently " + stateText + ".**";
     }

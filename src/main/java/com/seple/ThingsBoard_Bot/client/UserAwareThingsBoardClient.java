@@ -12,6 +12,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,8 +23,7 @@ import com.seple.ThingsBoard_Bot.config.ThingsBoardConfig;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * A ThingsBoard API client that uses the LOGGED-IN USER's JWT token
- * instead of the tenant-admin token.
+ * A ThingsBoard API client that uses the logged-in user's JWT token.
  */
 @Slf4j
 @Component
@@ -33,7 +34,7 @@ public class UserAwareThingsBoardClient {
     private final ObjectMapper objectMapper;
 
     public UserAwareThingsBoardClient(ThingsBoardConfig config,
-                                       @Qualifier("thingsBoardRestTemplate") RestTemplate restTemplate) {
+            @Qualifier("thingsBoardRestTemplate") RestTemplate restTemplate) {
         this.config = config;
         this.restTemplate = restTemplate;
         this.objectMapper = new ObjectMapper();
@@ -54,7 +55,7 @@ public class UserAwareThingsBoardClient {
         String url = config.getUrl() + "/api/auth/user";
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 JsonNode customerIdNode = json.get("customerId");
@@ -63,15 +64,46 @@ public class UserAwareThingsBoardClient {
                 }
             }
         } catch (Exception e) {
-            log.error("❌ Error fetching user info: {}", e.getMessage());
+            log.error("Error fetching user info: {}", e.getMessage());
         }
         return null;
     }
 
     public List<Map<String, String>> getUserDevices(String userToken) {
-        String url = config.getUrl() + "/api/entitiesQuery/find";
-        log.info("Fetching devices for user using entitiesQuery...");
+        int pageSize = config.getDevicePageSize() > 0 ? config.getDevicePageSize() : 100;
+        return getUserDevicesPaged(userToken, pageSize);
+    }
+
+    public List<Map<String, String>> getUserDevicesPaged(String userToken, int pageSize) {
         List<Map<String, String>> devices = new ArrayList<>();
+        int page = 0;
+        boolean hasNext = true;
+
+        while (hasNext) {
+            Map<String, Object> pageResult = queryUserDevicesPage(userToken, page, pageSize);
+            @SuppressWarnings("unchecked")
+            List<Map<String, String>> rows = (List<Map<String, String>>) pageResult.getOrDefault("data", List.of());
+            devices.addAll(rows);
+            hasNext = Boolean.TRUE.equals(pageResult.get("hasNext"));
+            page++;
+        }
+
+        if (!devices.isEmpty()) {
+            return devices;
+        }
+
+        List<Map<String, String>> customerDevices = getCustomerDevicesPaged(userToken, pageSize);
+        if (!customerDevices.isEmpty()) {
+            return customerDevices;
+        }
+
+        return getTenantDevicesPaged(userToken, pageSize);
+    }
+
+    public Map<String, Object> queryUserDevicesPage(String userToken, int page, int pageSize) {
+        String url = config.getUrl() + "/api/entitiesQuery/find";
+        List<Map<String, String>> devices = new ArrayList<>();
+        boolean hasNext = false;
 
         try {
             Map<String, Object> payload = new HashMap<>();
@@ -81,8 +113,8 @@ public class UserAwareThingsBoardClient {
             payload.put("entityFilter", entityFilter);
 
             Map<String, Object> pageLink = new HashMap<>();
-            pageLink.put("pageSize", 1000);
-            pageLink.put("page", 0);
+            pageLink.put("pageSize", pageSize);
+            pageLink.put("page", page);
             payload.put("pageLink", pageLink);
 
             List<Map<String, String>> entityFields = new ArrayList<>();
@@ -99,11 +131,12 @@ public class UserAwareThingsBoardClient {
             payload.put("entityFields", entityFields);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.POST, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 JsonNode dataArray = json.get("data");
+                hasNext = json.path("hasNext").asBoolean(false);
                 if (dataArray != null && dataArray.isArray()) {
                     for (JsonNode deviceNode : dataArray) {
                         Map<String, String> deviceMap = new HashMap<>();
@@ -113,71 +146,117 @@ public class UserAwareThingsBoardClient {
                         }
                         if (deviceNode.has("latest") && deviceNode.get("latest").has("ENTITY_FIELD")) {
                             JsonNode fields = deviceNode.get("latest").get("ENTITY_FIELD");
-                            if (fields.has("name")) deviceMap.put("name", fields.get("name").get("value").asText());
-                            if (fields.has("type")) deviceMap.put("type", fields.get("type").get("value").asText());
+                            if (fields.has("name")) {
+                                deviceMap.put("name", fields.get("name").get("value").asText());
+                            }
+                            if (fields.has("type")) {
+                                deviceMap.put("type", fields.get("type").get("value").asText());
+                            }
                         }
                         devices.add(deviceMap);
                     }
                 }
-                log.info("✅ Fetched {} devices via entitiesQuery", devices.size());
-                if (devices.isEmpty()) return fallbackTenantDevices(userToken);
             }
         } catch (Exception e) {
-            log.error("❌ Error fetching user devices via entitiesQuery: {}", e.getMessage());
-            return fallbackTenantDevices(userToken);
+            log.error("Error fetching user devices page {}: {}", page, e.getMessage());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("page", page);
+        result.put("hasNext", hasNext);
+        result.put("data", devices);
+        return result;
+    }
+
+    public JsonNode queryEntityData(String userToken, JsonNode payload) {
+        String url = config.getUrl() + "/api/queries/entityData";
+        try {
+            HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(payload), getHeaders(userToken));
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.POST, entity, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return objectMapper.readTree(response.getBody());
+            }
+        } catch (Exception e) {
+            log.error("User entity query failed: {}", e.getMessage());
+        }
+        return objectMapper.createObjectNode();
+    }
+
+    private List<Map<String, String>> getTenantDevicesPaged(String userToken, int pageSize) {
+        List<Map<String, String>> devices = new ArrayList<>();
+        int page = 0;
+        boolean hasNext = true;
+        while (hasNext) {
+            String url = config.getUrl() + "/api/tenant/devices?pageSize=" + pageSize + "&page=" + page;
+            try {
+                HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+                ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    JsonNode json = objectMapper.readTree(response.getBody());
+                    JsonNode dataArray = json.get("data");
+                    if (dataArray != null && dataArray.isArray()) {
+                        for (JsonNode deviceNode : dataArray) {
+                            Map<String, String> deviceMap = new HashMap<>();
+                            if (deviceNode.has("id")) {
+                                deviceMap.put("id", deviceNode.get("id").get("id").asText());
+                            }
+                            if (deviceNode.has("name")) {
+                                deviceMap.put("name", deviceNode.get("name").asText());
+                            }
+                            if (deviceNode.has("type")) {
+                                deviceMap.put("type", deviceNode.get("type").asText());
+                            }
+                            devices.add(deviceMap);
+                        }
+                    }
+                    hasNext = json.path("hasNext").asBoolean(false);
+                    page++;
+                } else {
+                    hasNext = false;
+                }
+            } catch (Exception e) {
+                log.error("Fallback tenant devices page failed: {}", e.getMessage());
+                hasNext = false;
+            }
         }
         return devices;
     }
 
-    private List<Map<String, String>> fallbackTenantDevices(String userToken) {
-        List<Map<String, String>> customerDevices = getCustomerDevices(userToken);
-        if (!customerDevices.isEmpty()) return customerDevices;
-
-        String url = config.getUrl() + "/api/tenant/devices?pageSize=1000&page=0";
+    private List<Map<String, String>> getCustomerDevicesPaged(String userToken, int pageSize) {
         List<Map<String, String>> devices = new ArrayList<>();
-        try {
-            HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode json = objectMapper.readTree(response.getBody());
-                JsonNode dataArray = json.get("data");
-                if (dataArray != null && dataArray.isArray()) {
-                    for (JsonNode deviceNode : dataArray) {
-                        Map<String, String> deviceMap = new HashMap<>();
-                        if (deviceNode.has("id")) deviceMap.put("id", deviceNode.get("id").get("id").asText());
-                        if (deviceNode.has("name")) deviceMap.put("name", deviceNode.get("name").asText());
-                        if (deviceNode.has("type")) deviceMap.put("type", deviceNode.get("type").asText());
-                        devices.add(deviceMap);
+        int page = 0;
+        boolean hasNext = true;
+        while (hasNext) {
+            String url = config.getUrl() + "/api/customer/devices?pageSize=" + pageSize + "&page=" + page;
+            try {
+                HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+                ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    JsonNode json = objectMapper.readTree(response.getBody());
+                    JsonNode dataArray = json.get("data");
+                    if (dataArray != null && dataArray.isArray()) {
+                        for (JsonNode deviceNode : dataArray) {
+                            Map<String, String> deviceMap = new HashMap<>();
+                            if (deviceNode.has("id")) {
+                                deviceMap.put("id", deviceNode.get("id").get("id").asText());
+                            }
+                            if (deviceNode.has("name")) {
+                                deviceMap.put("name", deviceNode.get("name").asText());
+                            }
+                            if (deviceNode.has("type")) {
+                                deviceMap.put("type", deviceNode.get("type").asText());
+                            }
+                            devices.add(deviceMap);
+                        }
                     }
+                    hasNext = json.path("hasNext").asBoolean(false);
+                    page++;
+                } else {
+                    hasNext = false;
                 }
+            } catch (Exception e) {
+                hasNext = false;
             }
-        } catch (Exception e) {
-            log.error("❌ Fallback tenant devices failed: {}", e.getMessage());
-        }
-        return devices;
-    }
-
-    private List<Map<String, String>> getCustomerDevices(String userToken) {
-        String url = config.getUrl() + "/api/customer/devices?pageSize=1000&page=0";
-        List<Map<String, String>> devices = new ArrayList<>();
-        try {
-            HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode json = objectMapper.readTree(response.getBody());
-                JsonNode dataArray = json.get("data");
-                if (dataArray != null && dataArray.isArray()) {
-                    for (JsonNode deviceNode : dataArray) {
-                        Map<String, String> deviceMap = new HashMap<>();
-                        if (deviceNode.has("id")) deviceMap.put("id", deviceNode.get("id").get("id").asText());
-                        if (deviceNode.has("name")) deviceMap.put("name", deviceNode.get("name").asText());
-                        if (deviceNode.has("type")) deviceMap.put("type", deviceNode.get("type").asText());
-                        devices.add(deviceMap);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Customer devices API not available");
         }
         return devices;
     }
@@ -191,7 +270,7 @@ public class UserAwareThingsBoardClient {
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
@@ -204,10 +283,39 @@ public class UserAwareThingsBoardClient {
                         }
                     }
                 });
-                log.info("✅ Fetched {} valid telemetry data points for device {}", result.size(), deviceId);
+                log.info("Fetched {} valid telemetry data points for device {}", result.size(), deviceId);
             }
         } catch (Exception e) {
-            log.error("❌ Failed to fetch telemetry for device {}: {}", deviceId, e.getMessage());
+            log.error("Failed to fetch telemetry for device {}: {}", deviceId, e.getMessage());
+        }
+        return result;
+    }
+
+    public Map<String, Object> getTelemetry(String userToken, String deviceId, List<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return getTelemetry(userToken, deviceId);
+        }
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId
+                + "/values/timeseries?keys=" + String.join(",", keys);
+        log.debug("Fetching selected telemetry keys ({}) for device {}", keys.size(), deviceId);
+        Map<String, Object> result = new HashMap<>();
+        try {
+            HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode json = objectMapper.readTree(response.getBody());
+                json.fields().forEachRemaining(entry -> {
+                    JsonNode valueArray = entry.getValue();
+                    if (valueArray.isArray() && !valueArray.isEmpty()) {
+                        JsonNode valueNode = valueArray.get(0).get("value");
+                        if (valueNode != null && !valueNode.isNull()) {
+                            flattenAndPut(result, entry.getKey(), valueNode.asText(), "User Telemetry");
+                        }
+                    }
+                });
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch selected telemetry for device {}: {}", deviceId, e.getMessage());
         }
         return result;
     }
@@ -221,7 +329,7 @@ public class UserAwareThingsBoardClient {
 
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode jsonArray = objectMapper.readTree(response.getBody());
@@ -233,42 +341,48 @@ public class UserAwareThingsBoardClient {
                         flattenAndPut(result, key, value, "User Attribute - " + scope);
                     }
                 }
-                log.info("✅ Fetched {} valid {} attributes for device {}", result.size(), scope, deviceId);
+                log.info("Fetched {} valid {} attributes for device {}", result.size(), scope, deviceId);
             }
         } catch (Exception e) {
-            log.error("❌ Failed to fetch {} attributes for device {}: {}", scope, deviceId, e.getMessage());
+            log.error("Failed to fetch {} attributes for device {}: {}", scope, deviceId, e.getMessage());
         }
         return result;
     }
 
     private void flattenAndPut(Map<String, Object> result, String key, String value, String prefix) {
-        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) return;
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) {
+            return;
+        }
         try {
             if ((value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"))) {
                 JsonNode node = objectMapper.readTree(value);
                 if (node.isObject()) {
                     node.fields().forEachRemaining(entry -> {
                         String subKey = key + "_" + entry.getKey();
-                        String subValue = entry.getValue().isTextual() ? entry.getValue().asText() : entry.getValue().toString();
+                        String subValue = entry.getValue().isTextual() ? entry.getValue().asText()
+                                : entry.getValue().toString();
                         result.put(subKey, subValue);
-                        log.info(" [{}] {} = {}", prefix, subKey, subValue);
+                        log.info("[{}] {} = {}", prefix, subKey, subValue);
                     });
                     return;
                 }
             }
-        } catch (Exception e) {}
+        } catch (Exception ignored) {
+        }
         result.put(key, value);
-        log.info("📡 [{}] {} = {}", prefix, key, value);
+        log.info("[{}] {} = {}", prefix, key, value);
     }
 
     // ==================== History ====================
 
-    public Map<String, List<Map<String, Object>>> getHistory(String userToken, String deviceId, String key, long startTs, long endTs) {
-        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/timeseries?keys=" + key + "&startTs=" + startTs + "&endTs=" + endTs + "&limit=100";
+    public Map<String, List<Map<String, Object>>> getHistory(String userToken, String deviceId, String key, long startTs,
+            long endTs) {
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/timeseries?keys=" + key
+                + "&startTs=" + startTs + "&endTs=" + endTs + "&limit=100";
         Map<String, List<Map<String, Object>>> result = new HashMap<>();
         try {
             HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 json.fields().forEachRemaining(entry -> {
@@ -283,8 +397,47 @@ public class UserAwareThingsBoardClient {
                 });
             }
         } catch (Exception e) {
-            log.error("❌ Error fetching history: {}", e.getMessage());
+            log.error("Error fetching history: {}", e.getMessage());
         }
         return result;
+    }
+
+    private <T> ResponseEntity<T> exchangeWithRetry(String url, HttpMethod method, HttpEntity<?> entity,
+            Class<T> responseType) {
+        int attempts = Math.max(1, config.getRetryAttempts());
+        long backoffMs = Math.max(0L, config.getRetryBackoffMs());
+        RestClientException lastException = null;
+
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                return restTemplate.exchange(url, method, entity, responseType);
+            } catch (HttpStatusCodeException e) {
+                lastException = e;
+                int code = e.getStatusCode().value();
+                boolean retryable = e.getStatusCode().is5xxServerError() || code == 429;
+                if (!retryable || attempt == attempts) {
+                    throw e;
+                }
+            } catch (RestClientException e) {
+                lastException = e;
+                if (attempt == attempts) {
+                    throw e;
+                }
+            }
+
+            if (backoffMs > 0) {
+                try {
+                    Thread.sleep(backoffMs * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+
+        if (lastException != null) {
+            throw lastException;
+        }
+        throw new IllegalStateException("exchangeWithRetry failed without exception");
     }
 }
