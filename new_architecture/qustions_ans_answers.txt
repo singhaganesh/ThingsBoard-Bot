@@ -1,0 +1,55 @@
+Q1. Is the Branch liluah Gateway battery low?
+ans. Battery Low Status: NORMAL. No low battery warning is active.
+ststus. Correct Answer
+
+Q2. Is there a low battery warning on the Branch liluah Gateway?
+ans. The Branch Gateway status is currently ONLINE.
+status. Wrong Answer
+
+Q3. What is the Branch dankuni CCTV HDD Error right now?
+ans. For Branch DANKUNI, CCTV Camera Status is 16 of 16 cameras ONLINE.
+status. Wrong Answer.
+
+Q4. What is the Branch Dankuni CCTV alarm status right now?
+ans. For Branch DANKUNI, CCTV Camera Status is 16 of 16 cameras ONLINE.
+status. Wrong Answer.
+
+Q5. What is the Branch dankuni BAS fault status right now?
+ans. For Branch DANKUNI, BAS Status is ONLINE
+status. Wrong Answer.   
+
+Q6. What is the Branch dankuni FAS fault status right now?
+ans. For Branch DANKUNI, FAS Status is ONLINE.
+status. Wrong Answer.
+
+Q7. Branch dankuni Is there any fault in fire alarm system?
+ans. For Branch DANKUNI, Alarm Count is 0.
+status. Wrong Answer.
+
+Q8. What is the Branch dankuni Time Lock fault status right now?
+ans. For Branch DANKUNI, Time Lock Status is NOT INSTALLED
+status. Wrong Answer.
+
+Q9. What is the Branch dankuni Time Lock alarm status right now?
+ans. For Branch DANKUNI, Alarm Count is 0.
+status. Wrong Answer. | if it not installed then why it is showing alarm count?
+
+Q10. Branch liluah is there any fault in Time Lock?
+ans. For Branch LILUAH, Time Lock Status is NOT INSTALLED.
+status. Correct Answer
+
+Q11.What is the Branch liluah Time Lock alarm status right now?
+ans. For Branch LILUAH, Alarm Count is 0.
+status. Wrong Answer. | if it not installed then why it is showing alarm count?
+
+Q12. What is the Branch dankuni Access Control power status right now?
+ans. For Branch DANKUNI, Access Control Status is NOT INSTALLED.
+status. Correct Answer
+
+Q13. What is the Branch dankuni Access Control alarm status right now? 
+ans. For Branch DANKUNI, Alarm Count is 0.
+status. Wrong Answer. | if it not installed then why it is showing alarm count?
+
+Q14. Branch New_Arc is there any fault in Access Control system?
+ans. For Branch NEW_ARC, Access Control Status is ONLINE.
+status. Wrong Answer.
