@@ -106,24 +106,29 @@ public class DataController {
         List<Map<String, String>> cleanedDevices = new ArrayList<>();
 
         if (userToken != null && !userToken.isBlank()) {
+            log.info("Attempting to fetch devices using provided JWT token...");
             // Get user scoped devices directly
             cleanedDevices = userDataService.getUserDevicesList(userToken);
+            log.info("UserDataService returned {} devices for this token.", cleanedDevices.size());
         } else {
+            log.info("No token provided. Falling back to global system client fetch.");
             // Fallback to all tenant devices
             List<Map<String, String>> devices = tbClient.getAllDevices();
             for (Map<String, String> device : devices) {
                 Map<String, String> basicInfo = new HashMap<>();
                 basicInfo.put("device_id", device.get("id"));
                 basicInfo.put("device_name", device.get("name"));
+                basicInfo.put("device_type", device.get("type"));
                 cleanedDevices.add(basicInfo);
             }
+            log.info("Global client returned {} devices.", cleanedDevices.size());
         }
         
         Map<String, Object> response = new HashMap<>();
         response.put("device_count", cleanedDevices.size());
         response.put("devices", cleanedDevices);
 
-        log.info("Returning count and basic info for {} devices", cleanedDevices.size());
+        log.info("FINAL RESPONSE: Returning {} devices to client.", cleanedDevices.size());
         return ResponseEntity.ok(response);
     }
 }

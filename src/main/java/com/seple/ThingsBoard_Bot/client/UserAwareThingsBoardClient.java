@@ -75,29 +75,77 @@ public class UserAwareThingsBoardClient {
     }
 
     public List<Map<String, String>> getUserDevicesPaged(String userToken, int pageSize) {
-        List<Map<String, String>> devices = new ArrayList<>();
-        int page = 0;
-        boolean hasNext = true;
+        log.info("Starting scoped device fetch for user token...");
+        
+        // Step 1: Get User Info to find Customer ID
+        String customerId = getCustomerId(userToken);
+        log.info("User associated with customerId: {}", customerId);
 
-        while (hasNext) {
-            Map<String, Object> pageResult = queryUserDevicesPage(userToken, page, pageSize);
-            @SuppressWarnings("unchecked")
-            List<Map<String, String>> rows = (List<Map<String, String>>) pageResult.getOrDefault("data", List.of());
-            devices.addAll(rows);
-            hasNext = Boolean.TRUE.equals(pageResult.get("hasNext"));
-            page++;
+        if (customerId != null && !customerId.equals("13814000-1dd2-11b2-8080-808080808080")) {
+            // Priority 1: Customer-specific devices by ID (Most reliable for assigned devices)
+            List<Map<String, String>> devices = getDevicesByCustomerIdPaged(userToken, customerId, pageSize);
+            if (!devices.isEmpty()) {
+                log.info("Strict scope: Found {} devices assigned to customer {}", devices.size(), customerId);
+                return devices;
+            }
         }
 
-        if (!devices.isEmpty()) {
-            return devices;
-        }
-
+        // Priority 2: Direct customer devices endpoint
         List<Map<String, String>> customerDevices = getCustomerDevicesPaged(userToken, pageSize);
         if (!customerDevices.isEmpty()) {
+            log.info("Strict scope: Found {} devices via customer endpoint", customerDevices.size());
             return customerDevices;
         }
 
-        return getTenantDevicesPaged(userToken, pageSize);
+        // Priority 3: Fallback only if no customer scoping found (Tenant Admin case)
+        List<Map<String, String>> tenantDevices = getTenantDevicesPaged(userToken, pageSize);
+        log.info("Final scope: Found {} tenant devices", tenantDevices.size());
+        return tenantDevices;
+    }
+
+    private List<Map<String, String>> getDevicesByCustomerIdPaged(String userToken, String customerId, int pageSize) {
+        List<Map<String, String>> devices = new ArrayList<>();
+        int page = 0;
+        boolean hasNext = true;
+        while (hasNext) {
+            String url = config.getUrl() + "/api/customer/" + customerId + "/devices?pageSize=" + pageSize + "&page=" + page;
+            try {
+                HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+                ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    JsonNode json = objectMapper.readTree(response.getBody());
+                    JsonNode dataArray = json.get("data");
+                    if (dataArray != null && dataArray.isArray()) {
+                        for (JsonNode deviceNode : dataArray) {
+                            devices.add(parseDeviceNode(deviceNode));
+                        }
+                    }
+                    hasNext = json.path("hasNext").asBoolean(false);
+                    page++;
+                } else {
+                    hasNext = false;
+                }
+            } catch (Exception e) {
+                log.error("Error fetching devices for customer {}: {}", customerId, e.getMessage());
+                hasNext = false;
+            }
+        }
+        return devices;
+    }
+
+    private Map<String, String> parseDeviceNode(JsonNode deviceNode) {
+        Map<String, String> deviceMap = new HashMap<>();
+        if (deviceNode.has("id")) {
+            JsonNode idNode = deviceNode.get("id");
+            deviceMap.put("id", idNode.has("id") ? idNode.get("id").asText() : idNode.asText());
+        }
+        if (deviceNode.has("name")) {
+            deviceMap.put("name", deviceNode.get("name").asText());
+        }
+        if (deviceNode.has("type")) {
+            deviceMap.put("type", deviceNode.get("type").asText());
+        }
+        return deviceMap;
     }
 
     public Map<String, Object> queryUserDevicesPage(String userToken, int page, int pageSize) {
@@ -279,7 +327,8 @@ public class UserAwareThingsBoardClient {
                     if (valueArray.isArray() && !valueArray.isEmpty()) {
                         JsonNode valueNode = valueArray.get(0).get("value");
                         if (valueNode != null && !valueNode.isNull()) {
-                            flattenAndPut(result, entry.getKey(), valueNode.asText(), "User Telemetry");
+                            String value = valueNode.isTextual() ? valueNode.asText() : valueNode.toString();
+                            flattenAndPut(result, entry.getKey(), value, "User Telemetry");
                         }
                     }
                 });
@@ -309,7 +358,8 @@ public class UserAwareThingsBoardClient {
                     if (valueArray.isArray() && !valueArray.isEmpty()) {
                         JsonNode valueNode = valueArray.get(0).get("value");
                         if (valueNode != null && !valueNode.isNull()) {
-                            flattenAndPut(result, entry.getKey(), valueNode.asText(), "User Telemetry");
+                            String value = valueNode.isTextual() ? valueNode.asText() : valueNode.toString();
+                            flattenAndPut(result, entry.getKey(), value, "User Telemetry");
                         }
                     }
                 });
