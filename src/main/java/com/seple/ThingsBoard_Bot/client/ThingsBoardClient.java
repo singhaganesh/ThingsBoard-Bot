@@ -281,10 +281,6 @@ public class ThingsBoardClient {
         return result;
     }
 
-    /**
-     * Flatten a potentially JSON string value and put it into the result map.
-     * If value is not JSON, it is put as-is.
-     */
     private void flattenAndPut(Map<String, Object> result, String key, String value, String prefix) {
         if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) {
             return;
@@ -292,17 +288,11 @@ public class ThingsBoardClient {
 
         try {
             if ((value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"))) {
+                // ✅ Store as parsed object — DO NOT flatten
                 JsonNode node = objectMapper.readTree(value);
-                if (node.isObject()) {
-                    node.fields().forEachRemaining(entry -> {
-                        String subKey = key + "_" + entry.getKey();
-                        String subValue = entry.getValue().isTextual() ? entry.getValue().asText()
-                                : entry.getValue().toString();
-                        result.put(subKey, subValue);
-                        log.info("[{}] {} = {}", prefix, subKey, subValue);
-                    });
-                    return;
-                }
+                result.put(key, objectMapper.convertValue(node, Object.class));
+                log.info("[{}] {} = <JSON Object>", prefix, key);
+                return;
             }
         } catch (Exception ignored) {
             // fall back to normal put

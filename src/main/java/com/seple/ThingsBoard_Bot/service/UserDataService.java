@@ -205,7 +205,11 @@ public class UserDataService {
         } else {
             flat.put("total_devices", allDevices.size());
             for (Map<String, Object> deviceData : allDevices) {
-                String name = deviceData.getOrDefault("device_name", "unknown").toString();
+                // ✅ Use device_id as prefix if name is blank
+                String name = deviceData.getOrDefault("device_name", "").toString().trim();
+                if (name.isBlank()) {
+                    name = deviceData.getOrDefault("device_id", "unknown").toString();
+                }
                 for (Map.Entry<String, Object> entry : deviceData.entrySet()) {
                     flat.put(name + "." + entry.getKey(), entry.getValue());
                 }
