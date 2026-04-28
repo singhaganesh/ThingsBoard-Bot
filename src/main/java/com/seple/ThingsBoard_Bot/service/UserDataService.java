@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.seple.ThingsBoard_Bot.client.UserAwareThingsBoardClient;
 import com.seple.ThingsBoard_Bot.config.ThingsBoardConfig;
 import com.seple.ThingsBoard_Bot.model.domain.BranchSnapshot;
@@ -290,6 +291,16 @@ public class UserDataService {
 
     public boolean isTwoStepFetchEnabled() {
         return thingsBoardConfig.isTwoStepFetchEnabled();
+    }
+
+    // ==================== Raw Data API ====================
+
+    public Object getRawAttributes(String userToken, String scope, String deviceId) {
+        return userTbClient.getRawAttributes(userToken, scope, deviceId);
+    }
+
+    public Object getRawTelemetry(String userToken, String deviceId) {
+        return userTbClient.getRawTelemetry(userToken, deviceId);
     }
 
     /**

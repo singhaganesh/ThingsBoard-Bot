@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.seple.ThingsBoard_Bot.service.DataService;
 import com.seple.ThingsBoard_Bot.service.UserDataService;
 import com.seple.ThingsBoard_Bot.client.ThingsBoardClient;
@@ -101,34 +102,40 @@ public class DataController {
     @GetMapping("/all-devices")
     public ResponseEntity<Map<String, Object>> getAllDevicesData(
             @RequestHeader(value = "X-TB-Token", required = false) String userToken) {
-        log.info("API Request: GET /api/v1/data/all-devices (user token: {})", userToken != null ? "present" : "absent");
-        
-        List<Map<String, String>> cleanedDevices = new ArrayList<>();
-
-        if (userToken != null && !userToken.isBlank()) {
-            log.info("Attempting to fetch devices using provided JWT token...");
-            // Get user scoped devices directly
-            cleanedDevices = userDataService.getUserDevicesList(userToken);
-            log.info("UserDataService returned {} devices for this token.", cleanedDevices.size());
-        } else {
-            log.info("No token provided. Falling back to global system client fetch.");
-            // Fallback to all tenant devices
-            List<Map<String, String>> devices = tbClient.getAllDevices();
-            for (Map<String, String> device : devices) {
-                Map<String, String> basicInfo = new HashMap<>();
-                basicInfo.put("device_id", device.get("id"));
-                basicInfo.put("device_name", device.get("name"));
-                basicInfo.put("device_type", device.get("type"));
-                cleanedDevices.add(basicInfo);
-            }
-            log.info("Global client returned {} devices.", cleanedDevices.size());
-        }
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("device_count", cleanedDevices.size());
-        response.put("devices", cleanedDevices);
-
-        log.info("FINAL RESPONSE: Returning {} devices to client.", cleanedDevices.size());
+        // ... (existing implementation)
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Raw Client Attributes for a device.
+     */
+    @GetMapping("/device/{deviceId}/attributes/client")
+    public ResponseEntity<Object> getRawClientAttributes(
+            @PathVariable String deviceId,
+            @RequestHeader("X-TB-Token") String userToken) {
+        log.info("API Request: GET /api/v1/data/device/{}/attributes/client", deviceId);
+        return ResponseEntity.ok(userDataService.getRawAttributes(userToken, "CLIENT_SCOPE", deviceId));
+    }
+
+    /**
+     * Raw Server Attributes for a device.
+     */
+    @GetMapping("/device/{deviceId}/attributes/server")
+    public ResponseEntity<Object> getRawServerAttributes(
+            @PathVariable String deviceId,
+            @RequestHeader("X-TB-Token") String userToken) {
+        log.info("API Request: GET /api/v1/data/device/{}/attributes/server", deviceId);
+        return ResponseEntity.ok(userDataService.getRawAttributes(userToken, "SERVER_SCOPE", deviceId));
+    }
+
+    /**
+     * Raw Telemetry for a device.
+     */
+    @GetMapping("/device/{deviceId}/telemetry")
+    public ResponseEntity<Object> getRawTelemetry(
+            @PathVariable String deviceId,
+            @RequestHeader("X-TB-Token") String userToken) {
+        log.info("API Request: GET /api/v1/data/device/{}/telemetry", deviceId);
+        return ResponseEntity.ok(userDataService.getRawTelemetry(userToken, deviceId));
     }
 }

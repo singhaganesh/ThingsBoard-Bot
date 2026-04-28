@@ -446,6 +446,38 @@ public class UserAwareThingsBoardClient {
         return result;
     }
 
+    // ==================== Raw Data Fetchers (Un-restructured) ====================
+
+    public Object getRawAttributes(String userToken, String scope, String deviceId) {
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/attributes/" + scope;
+        try {
+            HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode node = objectMapper.readTree(response.getBody());
+                return objectMapper.convertValue(node, Object.class);
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch raw {} attributes for device {}: {}", scope, deviceId, e.getMessage());
+        }
+        return new ArrayList<>();
+    }
+
+    public Object getRawTelemetry(String userToken, String deviceId) {
+        String url = config.getUrl() + "/api/plugins/telemetry/DEVICE/" + deviceId + "/values/timeseries";
+        try {
+            HttpEntity<Void> entity = new HttpEntity<>(getHeaders(userToken));
+            ResponseEntity<String> response = exchangeWithRetry(url, HttpMethod.GET, entity, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode node = objectMapper.readTree(response.getBody());
+                return objectMapper.convertValue(node, Object.class);
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch raw telemetry for device {}: {}", deviceId, e.getMessage());
+        }
+        return new HashMap<>();
+    }
+
     private <T> ResponseEntity<T> exchangeWithRetry(String url, HttpMethod method, HttpEntity<?> entity,
             Class<T> responseType) {
         int attempts = Math.max(1, config.getRetryAttempts());
