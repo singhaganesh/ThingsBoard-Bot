@@ -2,6 +2,7 @@ package com.seple.ThingsBoard_Bot.controller;
 
 import com.seple.ThingsBoard_Bot.model.dto.TbEventPayload;
 import com.seple.ThingsBoard_Bot.service.EventParseService;
+import com.seple.ThingsBoard_Bot.config.RabbitMQConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -42,13 +43,16 @@ public class WebhookController {
                     event.getPrevValue(),
                     event.getNewValue());
             
-            rabbitTemplate.convertAndSend("iot.events", event);
-            log.info("✅ Event sent to queue: iot.events");
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, "iot.event.device", event);
+            log.info("✅ Event sent to exchange: {}", RabbitMQConfig.EXCHANGE_NAME);
             
             return ResponseEntity.ok().build();
             
         } catch (Exception e) {
-            log.error("❌ Error processing webhook: {}", e.getMessage(), e);
+            log.error("❌ Error processing webhook: {} - {}", e.getMessage(), e.getClass().getName());
+            if (e.getCause() != null) {
+                log.error("❌ Caused by: {} - {}", e.getCause().getMessage(), e.getCause().getClass().getName());
+            }
             return ResponseEntity.status(500).build();
         }
     }
