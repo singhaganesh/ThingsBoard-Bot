@@ -93,7 +93,7 @@ public class DataController {
         return ResponseEntity.ok(deviceData);
     }
 
-    /**
+/**
      * Endpoint to retrieve data for ALL devices assigned to the tenant or user.
      * Fetches directly from ThingsBoard using the new helper methods.
      *
@@ -102,7 +102,29 @@ public class DataController {
     @GetMapping("/all-devices")
     public ResponseEntity<Map<String, Object>> getAllDevicesData(
             @RequestHeader(value = "X-TB-Token", required = false) String userToken) {
-        // ... (existing implementation)
+        log.info("API Request: GET /api/v1/data/all-devices (user token: {})", userToken != null ? "present" : "absent");
+        
+        List<Map<String, String>> cleanedDevices = new ArrayList<>();
+
+        if (userToken != null && !userToken.isBlank()) {
+            // Get user scoped devices directly
+            cleanedDevices = userDataService.getUserDevicesList(userToken);
+        } else {
+            // Fallback to all tenant devices
+            List<Map<String, String>> devices = tbClient.getAllDevices();
+            for (Map<String, String> device : devices) {
+                Map<String, String> basicInfo = new HashMap<>();
+                basicInfo.put("device_id", device.get("id"));
+                basicInfo.put("device_name", device.get("name"));
+                cleanedDevices.add(basicInfo);
+            }
+        }
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("device_count", cleanedDevices.size());
+        response.put("devices", cleanedDevices);
+
+        log.info("Returning count and basic info for {} devices", cleanedDevices.size());
         return ResponseEntity.ok(response);
     }
 
